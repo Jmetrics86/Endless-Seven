@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+  --font-cinzel: "Cinzel", serif;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #0a0a0f;
+  color: #e0e0e0;
+}
+
+.hud-gradient-top {
+  background: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.7), transparent);
+}
+
+.hud-gradient-bottom {
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+}
+
+.glass-panel {
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.light-glow {
+  box-shadow: 0 0 15px rgba(0, 242, 255, 0.4);
+  border-color: #00f2ff;
+}
+
+.dark-glow {
+  box-shadow: 0 0 15px rgba(255, 0, 68, 0.4);
+  border-color: #ff0044;
+}
