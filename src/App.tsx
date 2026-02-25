@@ -154,6 +154,25 @@ export default function App() {
               {gameState.instructionText}
             </div>
           </div>
+
+          {/* Side Log */}
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-72 h-[60vh] bg-black/40 backdrop-blur-md border-l border-white/10 p-4 pointer-events-auto flex flex-col overflow-hidden">
+            <div className="text-[0.6rem] text-gray-500 uppercase tracking-widest mb-4 border-b border-white/10 pb-2">Interaction Log</div>
+            <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin">
+              {gameState.logs.map((log, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="text-[0.7rem] leading-relaxed text-gray-300 font-mono"
+                >
+                  <span className="text-[#00f2ff] mr-2">»</span>
+                  {log}
+                </motion.div>
+              ))}
+              <div id="log-bottom" />
+            </div>
+          </div>
         </div>
       )}
 

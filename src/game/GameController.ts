@@ -36,6 +36,7 @@ export class GameController {
 
   private isProcessing = false;
   private activeSelection: CardEntity | null = null;
+  private currentResolvingSealIndex: number = -1;
   private selectedObject: CardEntity | null = null;
 
   private pendingAbilityData: any = null;
@@ -59,7 +60,8 @@ export class GameController {
       instructionText: 'Choose your side.',
       phaseStep: '',
       powerPool: 0,
-      weaknessPool: 0
+      weaknessPool: 0,
+      logs: []
     };
 
     this.setupBoard();
@@ -171,6 +173,7 @@ export class GameController {
 
   public selectAlignment(side: Alignment) {
     this.state.playerAlignment = side;
+    this.addLog(`Selected Alignment: ${side}`);
     if (side === Alignment.LIGHT) {
       this.playerDeck = this.buildDeck(LIGHT_POOL);
       this.enemyDeck = this.buildDeck(DARK_POOL);
@@ -194,7 +197,18 @@ export class GameController {
   private async startPrepPhase() {
     if (this.isProcessing) return;
     this.isProcessing = true;
+    this.addLog(`--- Round ${this.state.currentRound} Prep Phase ---`);
     this.updateState({ currentPhase: Phase.PREP, phaseStep: 'Step 1: Draw Hand' });
+
+    // Clear temporary invincibility from previous rounds
+    [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)]
+      .filter(c => c !== null)
+      .forEach(c => {
+        if (c!.data.isInvincible) {
+          c!.data.isInvincible = false;
+          this.addLog(`${c!.data.name}'s Invulnerability fades.`);
+        }
+      });
 
     for (let i = 0; i < 8; i++) {
       if (this.playerDeck.length === 0) break;
@@ -251,6 +265,7 @@ export class GameController {
   public endPrep() {
     if (this.isProcessing) return;
     this.isProcessing = true;
+    this.addLog("Ending Prep Phase. Purging hand...");
     this.updateState({ phaseStep: 'Purging hand...' });
 
     this.playerHand.forEach((card, i) => {
@@ -273,6 +288,7 @@ export class GameController {
 
   private async startResolution() {
     this.updateState({ currentPhase: Phase.RESOLUTION });
+    this.addLog("--- Resolution Phase Started ---");
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
       if (this.state.currentPhase === Phase.GAME_OVER) break;
       await this.resolveSeal(i);
@@ -295,11 +311,12 @@ export class GameController {
   }
 
   private async resolveSeal(idx: number) {
+    this.currentResolvingSealIndex = idx;
     const seal = this.seals[idx];
     this.updateState({ phaseStep: `Resolving Seal ${idx + 1}` });
+    this.addLog(`Resolving Seal ${idx + 1}...`);
     
-    gsap.to(this.sceneManager.camera.position, { x: seal.mesh.position.x, y: 14, z: 14, duration: 1 });
-    gsap.to(this.sceneManager.cameraTarget, { x: seal.mesh.position.x, y: 0, z: 0, duration: 1 });
+    this.zoomIn(idx);
     await new Promise(r => setTimeout(r, 1000));
 
     let pCard = this.playerBattlefield[idx];
@@ -323,38 +340,88 @@ export class GameController {
     this.updateState({ phaseStep: "Step A: The Flip" });
     const pFlipping = pCard && !pCard.data.faceUp;
     const eFlipping = eCard && !eCard.data.faceUp;
-    if (pFlipping) gsap.to(pCard.mesh.rotation, { x: 0, duration: 0.5 });
-    if (eFlipping) gsap.to(eCard.mesh.rotation, { x: 0, duration: 0.5 });
+    if (pFlipping) {
+      gsap.to(pCard.mesh.rotation, { x: 0, duration: 0.5 });
+      this.addLog(`Player reveals ${pCard.data.name}`);
+    }
+    if (eFlipping) {
+      gsap.to(eCard.mesh.rotation, { x: 0, duration: 0.5 });
+      this.addLog(`Enemy reveals ${eCard.data.name}`);
+    }
     if (pFlipping || eFlipping) await new Promise(r => setTimeout(r, 800));
 
-    // Step B: Flip Abilities
-    this.updateState({ phaseStep: "Step B: Flip Abilities" });
+    // Step B: Flip & Activate Abilities
+    this.updateState({ phaseStep: "Step B: Abilities" });
+    this.addLog("Processing Abilities...");
     let pEff = pCard ? pCard.data.power + pCard.data.powerMarkers - pCard.data.weaknessMarkers : 999;
     let eEff = eCard ? eCard.data.power + eCard.data.powerMarkers - eCard.data.weaknessMarkers : 999;
     
-    let executionOrder: ('player' | 'enemy')[] = [];
+    let executionOrder: ('player' | 'enemy' | 'champion')[] = [];
     if (pEff < eEff) executionOrder = ['player', 'enemy'];
     else if (eEff < pEff) executionOrder = ['enemy', 'player'];
     else executionOrder = Math.random() < 0.5 ? ['player', 'enemy'] : ['enemy', 'player'];
 
-    for (const side of executionOrder) {
-      let current = side === 'player' ? pCard : eCard;
-      let opponent = side === 'player' ? eCard : pCard;
-      let isFlipping = side === 'player' ? pFlipping : eFlipping;
+    if (seal.champion) executionOrder.push('champion');
 
-      if (!current || !isFlipping || current.data.isSuppressed) continue;
+    for (const side of executionOrder) {
+      let current: CardEntity | null = null;
+      let opponent: CardEntity | null = null;
+      let isFlipping = false;
+
+      if (side === 'player') {
+        current = pCard;
+        opponent = eCard;
+        isFlipping = pFlipping;
+      } else if (side === 'enemy') {
+        current = eCard;
+        opponent = pCard;
+        isFlipping = eFlipping;
+      } else {
+        current = seal.champion;
+        opponent = current?.data.isEnemy ? pCard : eCard;
+        isFlipping = false; // Champions are already face up
+      }
+
+      if (!current || current.data.isSuppressed) continue;
+      
+      const isActivate = current.data.ability.includes("Activate");
+      if (!isFlipping && !isActivate) continue;
 
       if (current.data.hasNullify) {
-        if (opponent) opponent.data.isSuppressed = true;
+        if (opponent && !opponent.data.faceUp && !this.isImmuneToAbilities(opponent, current)) {
+          opponent.data.faceUp = true;
+          opponent.data.isSuppressed = true;
+          opponent.updateVisualMarkers();
+          this.addLog(`${current.data.name} reveals and nullifies ${opponent.data.name}`);
+          gsap.to(opponent.mesh.rotation, { x: 0, duration: 0.5 });
+        } else if (opponent && opponent.data.faceUp) {
+          this.addLog(`${current.data.name}'s nullify fails: ${opponent.data.name} is already revealed.`);
+        } else if (opponent) {
+          this.addLog(`${opponent.data.name} is immune to ${current.data.name}'s nullify`);
+        }
       }
       if (current.data.ability.toLowerCase().includes("invulnerability")) {
         current.data.isInvincible = true;
+        this.addLog(`${current.data.name} gains Invulnerability`);
       }
       if (current.data.name === "The Spinner" || current.data.name === "Omega" || current.data.name === "Lord") {
         const count = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)]
           .filter(c => c !== null && c.data.faction === current!.data.faction).length;
         current.data.powerMarkers += count;
         current.updateVisualMarkers();
+        this.addLog(`${current.data.name} gains ${count} Power Markers from faction presence`);
+      }
+      if (current.data.name === "Herald") {
+        const deck = side === 'player' ? this.playerDeck : this.enemyDeck;
+        if (deck.length > 0) {
+          const topCard = deck[deck.length - 1];
+          const markers = topCard.power;
+          current.data.powerMarkers += markers;
+          current.updateVisualMarkers();
+          this.addLog(`${current.data.name} gains ${markers} Power Markers from top of deck (${topCard.name})`);
+        } else {
+          this.addLog(`${current.data.name} finds no cards in deck to gain markers from`);
+        }
       }
       if (current.data.name === "Beta") {
         const neighbors = [];
@@ -367,15 +434,20 @@ export class GameController {
           }
         });
         current.data.isInvincible = true;
+        this.addLog(`${current.data.name} buffs neighbors and gains Invulnerability`);
       }
       if (current.data.name === "Lust") {
-        if (opponent) {
+        if (opponent && !this.isImmuneToAbilities(opponent, current)) {
+          this.addLog(`${current.data.name} forces mutual sacrifice with ${opponent.data.name}`);
           this.destroyCard(current, side === 'enemy', idx, false);
           this.destroyCard(opponent, side === 'player' ? false : true, idx, false);
+        } else if (opponent) {
+          this.addLog(`${opponent.data.name} is immune to ${current.data.name}'s sacrifice`);
         }
       }
       if (current.data.name === "Duke") {
-        if (opponent) {
+        if (opponent && !this.isImmuneToAbilities(opponent, current)) {
+          this.addLog(`${current.data.name} spins ${opponent.data.name} back to deck`);
           const deck = side === 'player' ? this.enemyDeck : this.playerDeck;
           const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = opponent.data;
           deck.push({ ...baseData });
@@ -385,6 +457,8 @@ export class GameController {
           }});
           if (side === 'player') this.enemyBattlefield[idx] = null;
           else this.playerBattlefield[idx] = null;
+        } else if (opponent) {
+          this.addLog(`${opponent.data.name} is immune to ${current.data.name}'s spin`);
         }
       }
       if (current.data.needsAllocation) {
@@ -408,28 +482,53 @@ export class GameController {
     if (pCard) pCard.data.faceUp = true;
     if (eCard) eCard.data.faceUp = true;
 
+    // Delay before combat to ensure flip effects are assigned
+    await new Promise(r => setTimeout(r, 1000));
+
     // Step C: Battle
     this.updateState({ phaseStep: "Step C: Battle" });
+    let pStymied = false;
+    let eStymied = false;
+    
+    // Champion must be defeated first
     if (pCard && seal.champion && seal.champion.data.isEnemy) {
-      await this.handleBattle(pCard, seal.champion, idx, true);
+      this.addLog(`Player ${pCard.data.name} battles Enemy Champion ${seal.champion.data.name}`);
+      pStymied = await this.handleBattle(pCard, seal.champion, idx, true);
       pCard = this.playerBattlefield[idx];
     }
+    
+    // If player card survived or champion was defeated, enemy card can try to battle player champion
     if (eCard && seal.champion && !seal.champion.data.isEnemy) {
-      await this.handleBattle(eCard, seal.champion, idx, true);
+      this.addLog(`Enemy ${eCard.data.name} battles Player Champion ${seal.champion.data.name}`);
+      eStymied = await this.handleBattle(eCard, seal.champion, idx, true);
       eCard = this.enemyBattlefield[idx];
     }
 
-    if (pCard && eCard) {
-      await this.handleBattle(pCard, eCard, idx, false);
+    // Finally, battle between the cards behind the champion (if they survived and aren't blocked)
+    const pBlocked = seal.champion && seal.champion.data.isEnemy;
+    const eBlocked = seal.champion && !seal.champion.data.isEnemy;
+
+    if (pCard && eCard && !pBlocked && !eBlocked) {
+      this.addLog(`Battle: ${pCard.data.name} vs ${eCard.data.name}`);
+      const battleStymied = await this.handleBattle(pCard, eCard, idx, false);
+      if (battleStymied) {
+        pStymied = true;
+        eStymied = true;
+      }
     }
 
     // Step D: Siege
     this.updateState({ phaseStep: "Step D: Siege" });
     pCard = this.playerBattlefield[idx];
     eCard = this.enemyBattlefield[idx];
-    if (pCard) await this.handleSiege(idx, pCard, true);
-    else if (eCard) await this.handleSiege(idx, eCard, false);
-    else if (!seal.champion) await this.handleSiege(idx, null, true);
+
+    if (pStymied || eStymied) {
+      this.addLog(`Seal ${idx + 1} remains Neutral due to Stymied combat.`);
+      this.claimSeal(idx, Alignment.NEUTRAL);
+    } else {
+      if (pCard && !pBlocked) await this.handleSiege(idx, pCard, true);
+      else if (eCard && !eBlocked) await this.handleSiege(idx, eCard, false);
+    }
 
     // Step E: Ascension
     this.updateState({ phaseStep: "Step E: Ascension" });
@@ -441,36 +540,51 @@ export class GameController {
     await new Promise(r => setTimeout(r, 1000));
   }
 
-  private async handleBattle(attacker: CardEntity, defender: CardEntity, idx: number, isAgainstChamp: boolean) {
+  private async handleBattle(attacker: CardEntity, defender: CardEntity, idx: number, isAgainstChamp: boolean): Promise<boolean> {
     const aPow = attacker.data.power + attacker.data.powerMarkers - attacker.data.weaknessMarkers;
     const dPow = defender.data.power + defender.data.powerMarkers - defender.data.weaknessMarkers;
 
     const isAProtected = this.isProtected(attacker);
     const isDProtected = this.isProtected(defender);
+    let stymied = false;
 
     if (aPow > dPow) {
       if (!defender.data.isInvincible && !isDProtected) {
+        this.addLog(`${attacker.data.name} defeats ${defender.data.name}`);
         this.handleFinalAct(defender, attacker);
         this.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
         this.handlePostCombat(attacker);
+      } else {
+        this.addLog(`${defender.data.name} is Protected or Invincible. ${attacker.data.name} is stymied.`);
+        stymied = true;
       }
     } else if (dPow > aPow) {
       if (!attacker.data.isInvincible && !isAProtected) {
+        this.addLog(`${defender.data.name} defeats ${attacker.data.name}`);
         this.handleFinalAct(attacker, defender);
         this.destroyCard(attacker, attacker.data.isEnemy, idx, false);
         this.handlePostCombat(defender);
+      } else {
+        this.addLog(`${attacker.data.name} is Protected or Invincible. ${defender.data.name} is stymied.`);
+        stymied = true;
       }
     } else {
+      this.addLog(`Mutual destruction: ${attacker.data.name} and ${defender.data.name}`);
       if (!attacker.data.isInvincible && !isAProtected) {
         this.handleFinalAct(attacker, defender);
         this.destroyCard(attacker, attacker.data.isEnemy, idx, false);
+      } else if (attacker.data.isInvincible) {
+        stymied = true;
       }
       if (!defender.data.isInvincible && !isDProtected) {
         this.handleFinalAct(defender, attacker);
         this.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
+      } else if (defender.data.isInvincible) {
+        stymied = true;
       }
     }
     await new Promise(r => setTimeout(r, 500));
+    return stymied;
   }
 
   private handleFinalAct(dying: CardEntity, killer: CardEntity) {
@@ -480,18 +594,48 @@ export class GameController {
     }
   }
 
+  private isImmuneToAbilities(target: CardEntity, source: CardEntity): boolean {
+    if (source.data.type !== 'Creature') return false;
+    if (target.data.faction !== 'Celestial') return false;
+    
+    const seraphimOnSeal = this.seals.find(s => 
+      s.champion && 
+      s.champion.data.name === "Seraphim" && 
+      s.champion.data.isEnemy === target.data.isEnemy
+    );
+    
+    if (seraphimOnSeal && seraphimOnSeal.champion !== target) return true;
+    return false;
+  }
+
   private isProtected(card: CardEntity): boolean {
-    // Seraphim: Passive: Protects others while Champion.
-    const seal = this.seals.find(s => s.champion && s.champion.data.name === "Seraphim" && s.champion.data.isEnemy === card.data.isEnemy);
-    if (seal && seal.champion !== card) return true;
     return false;
   }
 
   private handlePostCombat(winner: CardEntity) {
     if (winner.data.name === "The Inevitable" || winner.data.name === "War" || winner.data.name === "Alpha") {
-      winner.data.powerMarkers += (winner.data.name === "War" ? 3 : 2);
+      const gain = (winner.data.name === "War" ? 3 : 2);
+      winner.data.powerMarkers += gain;
       winner.updateVisualMarkers();
+      this.addLog(`${winner.data.name} gains ${gain} Power Markers from victory`);
     }
+  }
+
+  private addLog(msg: string) {
+    const newLogs = [...this.state.logs, msg];
+    if (newLogs.length > 50) newLogs.shift();
+    this.updateState({ logs: newLogs });
+  }
+
+  private zoomOut() {
+    gsap.to(this.sceneManager.camera.position, { x: 0, y: 28, z: 32, duration: 1.2, ease: "power2.inOut" });
+    gsap.to(this.sceneManager.cameraTarget, { x: 0, y: 0, z: -2, duration: 1.2, ease: "power2.inOut" });
+  }
+
+  private zoomIn(idx: number) {
+    const seal = this.seals[idx];
+    gsap.to(this.sceneManager.camera.position, { x: seal.mesh.position.x, y: 14, z: 14, duration: 1, ease: "power2.inOut" });
+    gsap.to(this.sceneManager.cameraTarget, { x: seal.mesh.position.x, y: 0, z: 0, duration: 1, ease: "power2.inOut" });
   }
 
   private async handleSiege(idx: number, attacker: CardEntity | null, isPlayer: boolean) {
@@ -502,6 +646,7 @@ export class GameController {
       const pAlign = this.state.playerAlignment;
       const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
       const targetAlign = isPlayer ? pAlign : eAlign;
+      this.addLog(`${isPlayer ? 'Player' : 'Enemy'} influences Seal ${idx + 1} towards ${targetAlign}`);
       this.claimSeal(idx, targetAlign);
     }
   }
@@ -510,6 +655,7 @@ export class GameController {
     if (card.data.isEnemy) this.enemyBattlefield[idx] = null;
     else this.playerBattlefield[idx] = null;
     
+    this.addLog(`${card.data.name} ascends to Seal ${idx + 1}`);
     this.seals[idx].champion = card;
     gsap.to(card.mesh.position, {
       x: this.seals[idx].mesh.position.x,
@@ -525,29 +671,42 @@ export class GameController {
     let powerPool = data.markerPower || 0;
     let weaknessPool = data.markerWeakness || 0;
 
+    this.pendingAbilityData = { source: card };
+
     if (isAI) {
       const myUnits = this.enemyBattlefield.filter(c => c !== null) as CardEntity[];
       const enemyUnits = this.playerBattlefield.filter(c => c !== null) as CardEntity[];
       
       for (let i = 0; i < powerPool; i++) {
         if (myUnits.length > 0) {
-          myUnits[0].data.powerMarkers++;
-          myUnits[0].updateVisualMarkers();
+          if (!this.isImmuneToAbilities(myUnits[0], card)) {
+            myUnits[0].data.powerMarkers++;
+            myUnits[0].updateVisualMarkers();
+          } else {
+            this.addLog(`${myUnits[0].data.name} is immune to markers from ${card.data.name}`);
+          }
         }
       }
       for (let i = 0; i < weaknessPool; i++) {
         if (enemyUnits.length > 0) {
-          enemyUnits[0].data.weaknessMarkers++;
-          enemyUnits[0].updateVisualMarkers();
+          if (!this.isImmuneToAbilities(enemyUnits[0], card)) {
+            enemyUnits[0].data.weaknessMarkers++;
+            enemyUnits[0].updateVisualMarkers();
+          } else {
+            this.addLog(`${enemyUnits[0].data.name} is immune to markers from ${card.data.name}`);
+          }
         }
       }
+      this.pendingAbilityData = null;
       return Promise.resolve();
     } else {
       this.updateState({ 
         currentPhase: Phase.COUNTER_ALLOCATION, 
         powerPool, 
-        weaknessPool 
+        weaknessPool,
+        abilitySourceCardName: card.data.name
       });
+      this.zoomOut();
       return new Promise<void>((resolve) => {
         this.resolutionCallback = resolve;
       });
@@ -571,6 +730,7 @@ export class GameController {
         currentPhase: Phase.ABILITY_TARGETING,
         instructionText: `Select a target to ${data.effect?.toUpperCase()}.`
       });
+      this.zoomOut();
       return new Promise<void>((resolve) => {
         this.resolutionCallback = resolve;
       });
@@ -589,6 +749,7 @@ export class GameController {
         currentPhase: Phase.SEAL_TARGETING,
         instructionText: `Select an undefended seal to ${effect === Alignment.LIGHT ? 'PURIFY' : 'CORRUPT'}.`
       });
+      this.zoomOut();
       this.pendingAbilityData = { source, effect };
       return new Promise<void>((resolve) => {
         this.resolutionCallback = resolve;
@@ -612,17 +773,34 @@ export class GameController {
       source.data.weaknessMarkers += totalW;
       source.updateVisualMarkers();
     } else if (effect === 'corrupt_undefended') {
-      this.seals.filter(s => !s.champion && s.alignment !== Alignment.DARK).forEach(s => this.claimSeal(s.index, Alignment.DARK));
+      this.seals.filter(s => !s.champion && s.alignment === Alignment.LIGHT).forEach(s => this.claimSeal(s.index, Alignment.DARK));
     }
     await new Promise(r => setTimeout(r, 600));
   }
 
   private applyAbilityEffect(target: CardEntity) {
     if (!this.pendingAbilityData) return;
-    const { effect } = this.pendingAbilityData;
-    if (target.data.isInvincible) return;
+    const { effect, source } = this.pendingAbilityData;
+    
+    if (this.isImmuneToAbilities(target, source)) {
+      this.addLog(`${target.data.name} is immune to ${source.data.name}'s ability`);
+      return;
+    }
 
-    if (effect === 'destroy') {
+    if (target.data.isInvincible && effect !== 'destroy_marker') return;
+
+    if (effect === 'destroy_marker') {
+      if (target.data.powerMarkers > 0) {
+        target.data.powerMarkers--;
+        this.addLog(`${source.data.name} destroys a Power Marker on ${target.data.name}`);
+      } else if (target.data.weaknessMarkers > 0) {
+        target.data.weaknessMarkers--;
+        this.addLog(`${source.data.name} destroys a Weakness Marker on ${target.data.name}`);
+      } else {
+        this.addLog(`No markers to destroy on ${target.data.name}`);
+      }
+      target.updateVisualMarkers();
+    } else if (effect === 'destroy') {
       const idxP = this.playerBattlefield.indexOf(target);
       const idxE = this.enemyBattlefield.indexOf(target);
       const seal = this.seals.find(s => s.champion === target);
@@ -653,7 +831,9 @@ export class GameController {
   public finishCounters() {
     if (this.state.currentPhase !== Phase.GAME_OVER) {
       this.updateState({ powerPool: 0, weaknessPool: 0, currentPhase: Phase.RESOLUTION });
+      if (this.currentResolvingSealIndex !== -1) this.zoomIn(this.currentResolvingSealIndex);
     }
+    this.pendingAbilityData = null;
     if (this.resolutionCallback) this.resolutionCallback();
     this.resolutionCallback = null;
   }
@@ -670,12 +850,15 @@ export class GameController {
       body = pAlign === Alignment.LIGHT 
         ? "The Seventh Seal is Purified. The cycle of Light begins anew, casting away the shadows of the void."
         : "The Void has consumed the threshold. The world yields to the eternal rhythm of the Dark.";
+      this.addLog("GAME OVER: Player Victory");
     } else if (eCount > pCount) {
       body = pAlign === Alignment.LIGHT
         ? "The Light has flickered out. The opponent's corruption has claimed the world's essence."
         : "The Light has unexpectedly pierced the veil. Your dominion of shadow has been repelled.";
+      this.addLog("GAME OVER: Enemy Victory");
     } else {
       body = "The scales remain perfectly balanced. Neither Light nor Shadow can claim the throne of existence.";
+      this.addLog("GAME OVER: Draw");
     }
 
     this.updateState({ 
@@ -778,6 +961,7 @@ export class GameController {
           const idx = playerSlotIntersect.object.userData.slotIndex;
           if (idx >= 0 && idx < GAME_CONSTANTS.SEVEN && !this.playerBattlefield[idx]) {
             const card = this.activeSelection;
+            this.addLog(`Player places ${card.data.name} at Seal ${idx + 1}`);
             this.playerHand = this.playerHand.filter(c => c !== card);
             this.playerBattlefield[idx] = card;
             gsap.to(card.mesh.position, {
@@ -799,6 +983,10 @@ export class GameController {
         while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
         const card = allBoard.find(c => c.mesh === obj);
         if (card) {
+          if (this.pendingAbilityData && this.pendingAbilityData.source && this.isImmuneToAbilities(card, this.pendingAbilityData.source)) {
+            this.addLog(`${card.data.name} is immune to markers from ${this.pendingAbilityData.source.data.name}`);
+            return;
+          }
           if (this.state.powerPool > 0) {
             card.data.powerMarkers++;
             this.updateState({ powerPool: this.state.powerPool - 1 });
@@ -821,6 +1009,7 @@ export class GameController {
           const phaseAfterEffect = this.state.currentPhase as Phase;
           if (phaseAfterEffect !== Phase.GAME_OVER) {
             this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
+            if (this.currentResolvingSealIndex !== -1) this.zoomIn(this.currentResolvingSealIndex);
           }
           this.pendingAbilityData = null;
           if (this.resolutionCallback) this.resolutionCallback();
@@ -838,6 +1027,7 @@ export class GameController {
           const phaseAfterClaim = this.state.currentPhase as Phase;
           if (phaseAfterClaim !== Phase.GAME_OVER) {
             this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
+            if (this.currentResolvingSealIndex !== -1) this.zoomIn(this.currentResolvingSealIndex);
           }
           if (this.resolutionCallback) this.resolutionCallback();
           this.resolutionCallback = null;

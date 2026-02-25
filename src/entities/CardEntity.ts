@@ -25,10 +25,13 @@ export class CardEntity implements GameEntity {
   private wTex: THREE.CanvasTexture;
   private tCanvas: HTMLCanvasElement;
   private tTex: THREE.CanvasTexture;
+  private nCanvas: HTMLCanvasElement;
+  private nTex: THREE.CanvasTexture;
 
   private pMesh: THREE.Mesh;
   private wMesh: THREE.Mesh;
   private tMesh: THREE.Mesh;
+  private nMesh: THREE.Mesh;
 
   constructor(data: CardData, isEnemy: boolean, playerAlignment: Alignment) {
     this.data = {
@@ -114,6 +117,15 @@ export class CardEntity implements GameEntity {
     this.tMesh.position.set(0, 0.09, 1.2);
     this.mesh.add(this.tMesh);
 
+    this.nCanvas = document.createElement('canvas');
+    this.nCanvas.width = 128;
+    this.nCanvas.height = 128;
+    this.nTex = new THREE.CanvasTexture(this.nCanvas);
+    this.nMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map: this.nTex, transparent: true }));
+    this.nMesh.rotation.x = -Math.PI / 2;
+    this.nMesh.position.set(0, 0.1, -1.2); // Top middle
+    this.mesh.add(this.nMesh);
+
     this.updateVisualMarkers();
   }
 
@@ -152,6 +164,26 @@ export class CardEntity implements GameEntity {
     tCtx.strokeText(effPow.toString(), 64, 90);
     tCtx.fillText(effPow.toString(), 64, 90);
     this.tTex.needsUpdate = true;
+
+    const nCtx = this.nCanvas.getContext('2d')!;
+    nCtx.clearRect(0, 0, 128, 128);
+    if (this.data.isSuppressed) {
+      nCtx.fillStyle = '#888888';
+      nCtx.beginPath();
+      nCtx.arc(64, 64, 50, 0, Math.PI * 2);
+      nCtx.fill();
+      nCtx.strokeStyle = '#ffffff';
+      nCtx.lineWidth = 10;
+      nCtx.stroke();
+      nCtx.fillStyle = 'white';
+      nCtx.font = 'bold 80px Arial';
+      nCtx.textAlign = 'center';
+      nCtx.fillText("Ø", 64, 92);
+      this.nMesh.visible = true;
+    } else {
+      this.nMesh.visible = false;
+    }
+    this.nTex.needsUpdate = true;
   }
 
   public update(time: number) {
@@ -168,6 +200,7 @@ export class CardEntity implements GameEntity {
     this.pTex.dispose();
     this.wTex.dispose();
     this.tTex.dispose();
+    this.nTex.dispose();
     this.mesh.clear();
   }
 }

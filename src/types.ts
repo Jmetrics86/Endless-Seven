@@ -49,4 +49,6 @@ export interface GameState {
   phaseStep: string;
   powerPool: number;
   weaknessPool: number;
+  abilitySourceCardName?: string;
+  logs: string[];
 }
