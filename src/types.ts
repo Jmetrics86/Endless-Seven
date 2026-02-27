@@ -56,5 +56,6 @@ export interface GameState {
   weaknessPool: number;
   abilitySourceCardName?: string;
   lockedSealIndex?: number;
+  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE';
   logs: string[];
 }

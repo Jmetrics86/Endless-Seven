@@ -106,6 +106,9 @@ export class PhaseManager {
       if (this.controller.state.currentPhase === Phase.GAME_OVER) break;
       await this.resolveSeal(i);
     }
+
+    // End-of-round cleanup effects (e.g., Wild Wolf, Delta)
+    await this.cleanupEndOfRoundEffects();
     
     if (this.controller.state.currentPhase !== Phase.GAME_OVER) {
       // Reset camera
@@ -253,6 +256,47 @@ export class PhaseManager {
         }
       }
 
+      // Thrones
+      if (current.data.name === "Thrones") {
+        const pAlign = this.controller.state.playerAlignment;
+        const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
+        const targetAlign = side === 'player' ? pAlign : eAlign;
+
+        if (side === 'enemy') {
+          const validSeals = this.controller.seals.filter(s => !s.champion);
+          if (validSeals.length > 0) {
+            const preferred = validSeals.find(s => s.alignment !== targetAlign) || validSeals[0];
+            this.controller.addLog(`${current.data.name} changes the influence of Seal ${preferred.index + 1}`);
+            this.controller.claimSeal(preferred.index, targetAlign);
+          } else {
+            this.controller.addLog(`${current.data.name} finds no valid Seals to affect`);
+          }
+        } else {
+          const hasValid = this.controller.seals.some(s => !s.champion);
+          if (hasValid) {
+            this.controller.updateState({ 
+              currentPhase: Phase.SEAL_TARGETING,
+              instructionText: "Thrones: Select a Seal without a Champion to change its Influence."
+            });
+            this.controller.zoomOut();
+            const targetIdx = await new Promise<number>((resolve) => {
+              (this.controller as any).sealSelectionCallback = resolve;
+            });
+            if (targetIdx >= 0) {
+              const seal = this.controller.seals[targetIdx];
+              if (!seal.champion) {
+                this.controller.addLog(`${current.data.name} changes the influence of Seal ${targetIdx + 1}`);
+                this.controller.claimSeal(targetIdx, targetAlign);
+              } else {
+                this.controller.addLog(`Thrones cannot change a Seal that already has a Champion.`);
+              }
+            }
+          } else {
+            this.controller.addLog(`${current.data.name} finds no valid Seals to affect`);
+          }
+        }
+      }
+
       // Beta
       if (current.data.name === "Beta") {
         const neighbors = [];
@@ -266,6 +310,12 @@ export class PhaseManager {
         });
         current.data.isInvincible = true;
         this.controller.addLog(`${current.data.name} buffs neighbors and gains Invulnerability`);
+      }
+
+      // Delta Activate: mark that Delta can sacrifice at end of round
+      if (isActivate && current.data.name === "Delta") {
+        current.data.pendingDeltaSacrifice = true;
+        this.controller.addLog(`${current.data.name} readies its end-of-round sacrifice.`);
       }
 
       // Lust
@@ -410,8 +460,120 @@ export class PhaseManager {
         stymied = true;
       }
     }
+    // Wild Wolf: Any creature that does battle with Wild Wolf is destroyed at end of the round.
+    const applyWildWolfMark = (wolf: CardEntity, other: CardEntity | null) => {
+      if (!other) return;
+      // Only mark if the other creature is still in play after combat
+      const inPlay =
+        this.controller.playerBattlefield.includes(other) ||
+        this.controller.enemyBattlefield.includes(other) ||
+        this.controller.seals.some(s => s.champion === other);
+      if (inPlay) {
+        other.data.markedByWildWolf = true;
+        this.controller.addLog(`${wolf.data.name} marks ${other.data.name} for destruction at end of round.`);
+      }
+    };
+
+    if (attacker.data.name === "Wild Wolf") {
+      applyWildWolfMark(attacker, defender);
+    } else if (defender.data.name === "Wild Wolf") {
+      applyWildWolfMark(defender, attacker);
+    }
+
     await new Promise(r => setTimeout(r, 500));
     return stymied;
+  }
+
+  private async cleanupEndOfRoundEffects() {
+    // Destroy any creatures marked by Wild Wolf's rider
+    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
+      const pCard = this.controller.playerBattlefield[i];
+      if (pCard && pCard.data.markedByWildWolf) {
+        this.controller.addLog(`${pCard.data.name} is slain by Wild Wolf's lingering bite.`);
+        this.controller.destroyCard(pCard, false, i, false);
+        pCard.data.markedByWildWolf = false;
+      }
+      const eCard = this.controller.enemyBattlefield[i];
+      if (eCard && eCard.data.markedByWildWolf) {
+        this.controller.addLog(`${eCard.data.name} is slain by Wild Wolf's lingering bite.`);
+        this.controller.destroyCard(eCard, true, i, false);
+        eCard.data.markedByWildWolf = false;
+      }
+    }
+
+    this.controller.seals.forEach((seal, idx) => {
+      const champ = seal.champion;
+      if (champ && champ.data.markedByWildWolf) {
+        this.controller.addLog(`${champ.data.name} is slain by Wild Wolf's lingering bite.`);
+        this.controller.destroyCard(champ, champ.data.isEnemy, idx, true);
+        champ.data.markedByWildWolf = false;
+      }
+    });
+
+    // Resolve Delta's end-of-round sacrifice and buff
+    // Enemy Delta: always auto-activate
+    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
+      const eCard = this.controller.enemyBattlefield[i];
+      if (eCard && eCard.data.name === "Delta" && eCard.data.pendingDeltaSacrifice) {
+        this.controller.addLog(`${eCard.data.name} sacrifices itself to empower an ally.`);
+        this.controller.destroyCard(eCard, true, i, false);
+      }
+    }
+
+    // Player Delta: optional via decision dialog (shared with Fallen One)
+    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
+      const pCard = this.controller.playerBattlefield[i];
+      if (pCard && pCard.data.name === "Delta" && pCard.data.pendingDeltaSacrifice) {
+        // Ask the player if they want to use Delta's sacrifice
+        this.controller.updateState({
+          decisionContext: 'DELTA_SACRIFICE',
+          instructionText: `Use Delta to sacrifice itself and grant +3 Power Markers to an ally?`
+        });
+
+        const confirmed = await new Promise<boolean>((resolve) => {
+          (this.controller as any).nullifyCallback = resolve;
+        });
+
+        // Clear decision context from HUD
+        this.controller.updateState({ decisionContext: undefined });
+
+        if (confirmed) {
+          this.controller.addLog(`${pCard.data.name} sacrifices itself to empower an ally.`);
+          this.controller.destroyCard(pCard, false, i, false);
+        } else {
+          pCard.data.pendingDeltaSacrifice = false;
+        }
+        break; // Handle one player Delta per round for now
+      }
+    }
+
+    // Apply +3 Power Markers to any creature marked by Delta's effect
+    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
+      const pBuff = this.controller.playerBattlefield[i];
+      if (pBuff && pBuff.data.markedForDeltaBuff) {
+        pBuff.data.powerMarkers += 3;
+        pBuff.data.markedForDeltaBuff = false;
+        pBuff.updateVisualMarkers();
+        this.controller.addLog(`${pBuff.data.name} receives +3 Power Markers from Delta's sacrifice.`);
+      }
+      const eBuff = this.controller.enemyBattlefield[i];
+      if (eBuff && eBuff.data.markedForDeltaBuff) {
+        eBuff.data.powerMarkers += 3;
+        eBuff.data.markedForDeltaBuff = false;
+        eBuff.updateVisualMarkers();
+        this.controller.addLog(`${eBuff.data.name} receives +3 Power Markers from Delta's sacrifice.`);
+      }
+    }
+
+    this.controller.seals.forEach((seal, idx) => {
+      const champBuff = seal.champion;
+      if (champBuff && champBuff.data.markedForDeltaBuff) {
+        champBuff.data.powerMarkers += 3;
+        champBuff.data.markedForDeltaBuff = false;
+        champBuff.updateVisualMarkers();
+        this.controller.addLog(`${champBuff.data.name} receives +3 Power Markers from Delta's sacrifice.`);
+      }
+    });
   }
 
   public async handleSiege(idx: number, attacker: CardEntity | null, isPlayer: boolean) {

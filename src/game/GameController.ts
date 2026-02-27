@@ -315,6 +315,12 @@ export class GameController implements IGameController {
 
 
   public forceSkip() {
+    // Do not skip while a Fallen One nullify choice is active
+    if (this.state.instructionText.includes("Use Fallen One from Limbo")) {
+      this.addLog("Resolve Fallen One's nullify choice before skipping.");
+      return;
+    }
+
     this.addLog("Forcing skip of current interaction...");
     this.isProcessing = false;
     this.pendingAbilityData = null;

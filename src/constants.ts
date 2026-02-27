@@ -19,12 +19,12 @@ export const LIGHT_POOL: CardData[] = [
   { name: "Herald", faction: "Celestial", type: "Creature", power: 5, isChampion: false, ability: "Flip: Gain Power Markers equal to the top card of your deck." },
   { name: "Nephilim", faction: "Celestial", type: "Creature", power: 3, isChampion: false, ability: "Flip: Battle invulnerability this round. Activate: Choose a Seal. Enemy cannot change influence of that Seal until end of round.", hasActivate: true },
   { name: "Seraphim", faction: "Celestial", type: "Creature", power: 7, isChampion: true, ability: "Champion. Passive: While on a Seal, other Celestials are immune to creature abilities. Activate: Destroy one Marker.", hasTargetedAbility: true, effect: 'destroy_marker', targetType: 'any', hasActivate: true },
-  { name: "Thrones", faction: "Angel", type: "Creature", power: 1, isChampion: false, ability: "Flip: Change Influence of empty Seal." },
-  { name: "Alpha", faction: "Lycan", type: "Creature", power: 7, isChampion: false, ability: "Haste: Combat first. Gain 2 Power Markers after victory.", hasHaste: true },
+  { name: "Thrones", faction: "Celestial", type: "Creature", power: 1, isChampion: false, ability: "Flip: Change Influence of empty Seal." },
+  { name: "Alpha", faction: "Lycan", type: "Creature", power: 7, isChampion: true, ability: "Champion. Haste: Combat first. Gain 2 Power Markers after victory.", hasHaste: true },
   { name: "Beta", faction: "Lycan", type: "Creature", power: 6, isChampion: false, ability: "Flip: Battle invulnerability. Buff adjacent unit +2." },
   { name: "Omega", faction: "Lycan", type: "Creature", power: 5, isChampion: false, ability: "Flip: +1 Power Marker for every Lycan in Play.", markerPower: 1, needsAllocation: true },
   { name: "Sentinel", faction: "Lycan", type: "Creature", power: 4, isChampion: false, ability: "Flip: Target card loses 2 Power.", markerWeakness: 2, needsAllocation: true },
-  { name: "Delta", faction: "Lycan", type: "Creature", power: 3, isChampion: false, ability: "Flip: Buff 3 cards +1 Power each.", markerPower: 3, needsAllocation: true },
+  { name: "Delta", faction: "Lycan", type: "Creature", power: 3, isChampion: false, ability: "Flip: Buff 3 cards +1 Power each. Activate: At end of round, sacrifice Delta to place +3 Power Markers on an ally.", markerPower: 3, needsAllocation: true, hasActivate: true },
   { name: "Luna", faction: "Lycan", type: "Creature", power: 2, isChampion: false, ability: "Final Act: Nullify enemy Influence change." },
   { name: "Wild Wolf", faction: "Lycan", type: "Creature", power: 1, isChampion: false, ability: "Haste: Resolve combat first.", hasHaste: true }
 ];
@@ -60,3 +60,5 @@ export const GAME_CONSTANTS = {
   CARD_H: 3.2,
   TABLE_SIZE: 400
 };
+
+export const GAME_VERSION = "v0.1.3";

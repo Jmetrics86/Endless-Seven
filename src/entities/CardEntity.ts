@@ -17,6 +17,9 @@ export class CardEntity implements GameEntity {
     weaknessMarkers: number;
     isInvincible: boolean;
     isSuppressed: boolean;
+    markedByWildWolf?: boolean;
+    pendingDeltaSacrifice?: boolean;
+    markedForDeltaBuff?: boolean;
   };
 
   private pCanvas: HTMLCanvasElement;
@@ -41,7 +44,10 @@ export class CardEntity implements GameEntity {
       powerMarkers: 0,
       weaknessMarkers: 0,
       isInvincible: false,
-      isSuppressed: false
+      isSuppressed: false,
+      markedByWildWolf: false,
+      pendingDeltaSacrifice: false,
+      markedForDeltaBuff: false
     };
 
     this.mesh = new THREE.Group();

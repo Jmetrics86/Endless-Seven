@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GameController } from './game/GameController';
+import { GAME_VERSION } from './constants';
 import { Alignment, Phase, GameState } from './types';
 
 export default function App() {
@@ -39,7 +40,7 @@ export default function App() {
     gameRef.current?.finishCounters();
   };
 
-  const handleNullify = (confirmed: boolean) => {
+  const handleDecision = (confirmed: boolean) => {
     if (gameRef.current) {
       (gameRef.current as any).nullifyCallback?.(confirmed);
       (gameRef.current as any).nullifyCallback = null;
@@ -59,25 +60,27 @@ export default function App() {
       <AnimatePresence>
         {gameState?.currentPhase === Phase.COUNTER_ALLOCATION && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="absolute top-[220px] left-1/2 -translate-x-1/2 z-50 glass-panel p-6 rounded-xl border-2 border-[#00f2ff] shadow-[0_0_30px_rgba(0,242,255,0.5)] pointer-events-auto text-center min-w-[300px]"
+            initial={{ opacity: 0, x: -40, y: 0 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            exit={{ opacity: 0, x: -40, y: 0 }}
+            className="absolute top-1/2 left-6 -translate-y-1/2 z-50 glass-panel px-4 py-3 rounded-lg border border-[#00f2ff]/40 bg-black/70 shadow-[0_0_20px_rgba(0,242,255,0.35)] pointer-events-auto text-left min-w-[180px] space-y-2"
           >
-            <div className="text-sm mb-4 tracking-widest uppercase">Allocate Counters</div>
-            <div className="flex justify-center gap-8 mb-6">
-              <div className="flex flex-col items-center">
-                <div className="text-[0.6rem] text-gray-500 uppercase mb-1">Power Markers</div>
-                <div className="text-2xl text-[#00f2ff] font-bold">{gameState.powerPool}</div>
+            <div className="text-[0.6rem] tracking-[0.2em] uppercase text-gray-400">
+              Allocate Counters
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-[0.6rem] text-gray-500 uppercase">Power</span>
+                <span className="text-xl text-[#00f2ff] font-bold">{gameState.powerPool}</span>
               </div>
-              <div className="flex flex-col items-center">
-                <div className="text-[0.6rem] text-gray-500 uppercase mb-1">Weakness</div>
-                <div className="text-2xl text-[#ff0044] font-bold">{gameState.weaknessPool}</div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-[0.6rem] text-gray-500 uppercase">Weakness</span>
+                <span className="text-xl text-[#ff0044] font-bold">{gameState.weaknessPool}</span>
               </div>
             </div>
             <button
               onClick={handleFinishCounters}
-              className="px-6 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-xs tracking-widest uppercase font-bold"
+              className="mt-1 px-4 py-1 bg-white/5 border border-white/15 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
             >
               Done
             </button>
@@ -119,8 +122,8 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* HUD */}
-      {gameState && !showSelection && (
+      {/* HUD (hidden during Game Over) */}
+      {gameState && !showSelection && gameState.currentPhase !== Phase.GAME_OVER && (
         <div className="absolute inset-0 pointer-events-none flex flex-col justify-between z-10">
           {/* Top Bar */}
           <div className="hud-gradient-top p-6 flex justify-between items-start pointer-events-auto">
@@ -170,22 +173,6 @@ export default function App() {
             <div className="text-sm text-gray-300 italic text-center max-w-2xl mb-4">
               {gameState.instructionText}
             </div>
-            {gameState.instructionText.includes("Use Fallen One") && (
-              <div className="flex gap-4">
-                <button
-                  onClick={() => handleNullify(true)}
-                  className="px-8 py-2 bg-[#00f2ff]/20 border border-[#00f2ff] text-[#00f2ff] hover:bg-[#00f2ff]/40 transition-all text-xs tracking-widest uppercase font-bold"
-                >
-                  Nullify
-                </button>
-                <button
-                  onClick={() => handleNullify(false)}
-                  className="px-8 py-2 bg-white/5 border border-white/20 hover:border-white/40 transition-all text-xs tracking-widest uppercase font-bold"
-                >
-                  Skip
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Side Log */}
@@ -236,6 +223,44 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Decision Dialog (Fallen One, Delta, etc.) */}
+      <AnimatePresence>
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+          >
+            <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">
+              {gameState.decisionContext === 'FALLEN_ONE' ? 'Limbo Reaction' : 'End of Round Ability'}
+            </div>
+            <div className="text-xs text-gray-200 text-center max-w-xs">
+              {gameState.instructionText}
+            </div>
+            <div className="flex gap-4 mt-1">
+              <button
+                onClick={() => handleDecision(true)}
+                className="px-6 py-1.5 bg-[#00f2ff]/20 border border-[#00f2ff] text-[#00f2ff] hover:bg-[#00f2ff]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                {gameState.decisionContext === 'FALLEN_ONE' ? 'Nullify' : 'Activate'}
+              </button>
+              <button
+                onClick={() => handleDecision(false)}
+                className="px-6 py-1.5 bg-white/5 border border-white/20 hover:border-white/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                Skip
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Version Badge */}
+      <div className="absolute bottom-4 right-6 z-[120] text-[0.65rem] tracking-widest text-gray-500 pointer-events-none">
+        VERSION PUBLISHED: <span className="text-gray-300">{GAME_VERSION}</span>
+      </div>
     </div>
   );
 }

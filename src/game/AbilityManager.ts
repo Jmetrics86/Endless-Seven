@@ -232,7 +232,8 @@ export class AbilityManager {
         // I'll implement a state for this.
         this.controller.updateState({ 
           instructionText: `Use Fallen One from Limbo to Nullify ${source.data.name}?`,
-          currentPhase: Phase.ABILITY_TARGETING // Reusing targeting phase for response
+          currentPhase: Phase.ABILITY_TARGETING, // Reusing targeting phase for response
+          decisionContext: 'FALLEN_ONE'
         });
         
         const confirmed = await new Promise<boolean>((resolve) => {
