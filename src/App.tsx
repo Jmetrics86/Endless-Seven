@@ -39,6 +39,17 @@ export default function App() {
     gameRef.current?.finishCounters();
   };
 
+  const handleNullify = (confirmed: boolean) => {
+    if (gameRef.current) {
+      (gameRef.current as any).nullifyCallback?.(confirmed);
+      (gameRef.current as any).nullifyCallback = null;
+    }
+  };
+
+  const handleForceSkip = () => {
+    gameRef.current?.forceSkip();
+  };
+
   return (
     <div className="relative w-full h-screen overflow-hidden font-cinzel">
       {/* Three.js Container */}
@@ -116,7 +127,10 @@ export default function App() {
             <div className={`p-4 rounded-lg glass-panel min-w-[150px] ${gameState.playerAlignment === Alignment.LIGHT ? 'dark-glow' : 'light-glow'}`}>
               <div className="text-[0.7rem] text-[#ff0044]">ENEMY</div>
               <div className="text-3xl">{gameState.enemyScore} / 7</div>
-              <div className="text-[0.6rem] text-gray-400 mt-1">DECK: {gameState.enemyDeckCount}</div>
+              <div className="flex justify-between text-[0.6rem] text-gray-400 mt-1">
+                <span>DECK: {gameState.enemyDeckCount}</span>
+                <span>GRAVE: {gameState.enemyGraveyardCount}</span>
+              </div>
             </div>
 
             <div className="flex flex-col items-center gap-2">
@@ -144,15 +158,34 @@ export default function App() {
             <div className={`p-4 rounded-lg glass-panel min-w-[150px] text-right ${gameState.playerAlignment === Alignment.LIGHT ? 'light-glow' : 'dark-glow'}`}>
               <div className="text-[0.7rem] text-[#00f2ff]">YOU</div>
               <div className="text-3xl">{gameState.playerScore} / 7</div>
-              <div className="text-[0.6rem] text-gray-400 mt-1">DECK: {gameState.playerDeckCount}</div>
+              <div className="flex justify-between text-[0.6rem] text-gray-400 mt-1">
+                <span>GRAVE: {gameState.playerGraveyardCount}</span>
+                <span>DECK: {gameState.playerDeckCount}</span>
+              </div>
             </div>
           </div>
 
           {/* Bottom Bar */}
           <div className="hud-gradient-bottom p-8 flex flex-col items-center pointer-events-auto">
-            <div className="text-sm text-gray-300 italic text-center max-w-2xl">
+            <div className="text-sm text-gray-300 italic text-center max-w-2xl mb-4">
               {gameState.instructionText}
             </div>
+            {gameState.instructionText.includes("Use Fallen One") && (
+              <div className="flex gap-4">
+                <button
+                  onClick={() => handleNullify(true)}
+                  className="px-8 py-2 bg-[#00f2ff]/20 border border-[#00f2ff] text-[#00f2ff] hover:bg-[#00f2ff]/40 transition-all text-xs tracking-widest uppercase font-bold"
+                >
+                  Nullify
+                </button>
+                <button
+                  onClick={() => handleNullify(false)}
+                  className="px-8 py-2 bg-white/5 border border-white/20 hover:border-white/40 transition-all text-xs tracking-widest uppercase font-bold"
+                >
+                  Skip
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Side Log */}
@@ -172,6 +205,14 @@ export default function App() {
               ))}
               <div id="log-bottom" />
             </div>
+            
+            {/* Force Skip Button */}
+            <button
+              onClick={handleForceSkip}
+              className="mt-4 px-4 py-2 bg-white/5 border border-white/10 hover:border-[#ff0044] hover:text-[#ff0044] transition-all text-[0.6rem] tracking-widest uppercase font-bold"
+            >
+              Skip Interaction
+            </button>
           </div>
         </div>
       )}

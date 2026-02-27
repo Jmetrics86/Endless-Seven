@@ -35,6 +35,9 @@ export interface CardData {
   hasSealTargetAbility?: boolean;
   sealEffect?: string;
   hasGlobalAbility?: boolean;
+  hasHaste?: boolean;
+  hasLimboAbility?: boolean;
+  hasActivate?: boolean;
 }
 
 export interface GameState {
@@ -45,10 +48,13 @@ export interface GameState {
   enemyScore: number;
   playerDeckCount: number;
   enemyDeckCount: number;
+  playerGraveyardCount: number;
+  enemyGraveyardCount: number;
   instructionText: string;
   phaseStep: string;
   powerPool: number;
   weaknessPool: number;
   abilitySourceCardName?: string;
+  lockedSealIndex?: number;
   logs: string[];
 }

@@ -11,22 +11,22 @@ export const LIGHT_POOL: CardData[] = [
   { name: "Prophet", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Passive: Prevents Purified Seals from being Corrupted while in play." },
   { name: "The Inevitable", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Post-Combat: After destroying a creature, gain 2 Power Markers." },
   { name: "Saint Michael", faction: "Light", type: "Avatar", power: 10, isChampion: true, ability: "Win Con: Activate with 7 Seals. Final Act: Target battled card loses 3 Power." },
-  { name: "Martyr", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Limbo Trigger: Purify one Neutral Seal without a Champion." },
+  { name: "Martyr", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Limbo Trigger: Purify one Neutral Seal without a Champion.", hasLimboAbility: true },
   { name: "The Almighty", faction: "Light", type: "God", power: 15, isChampion: true, ability: "Flip: Purify a Corrupted Seal without a Champion.", hasSealTargetAbility: true, sealEffect: 'LIGHT' },
   { name: "Archangel", faction: "Celestial", type: "Creature", power: 2, isChampion: false, ability: "Flip: Reveal enemy card and Nullify its Flip ability.", hasNullify: true },
   { name: "Cherubim", faction: "Celestial", type: "Creature", power: 4, isChampion: false, ability: "Flip: Return target creature in play to owner's deck.", hasTargetedAbility: true, effect: 'return', targetType: 'creature' },
-  { name: "Fallen One", faction: "Celestial", type: "Creature", power: 6, isChampion: false, ability: "Haste: Resolve battle before Flip." },
+  { name: "Fallen One", faction: "Celestial", type: "Creature", power: 6, isChampion: false, ability: "Haste: Resolve battle before Flip.", hasHaste: true, hasLimboAbility: true },
   { name: "Herald", faction: "Celestial", type: "Creature", power: 5, isChampion: false, ability: "Flip: Gain Power Markers equal to the top card of your deck." },
-  { name: "Nephilim", faction: "Celestial", type: "Creature", power: 3, isChampion: false, ability: "Flip: Battle invulnerability this round." },
-  { name: "Seraphim", faction: "Celestial", type: "Creature", power: 7, isChampion: true, ability: "Champion. Passive: While on a Seal, other Celestials are immune to creature abilities. Activate: Destroy one Marker.", hasTargetedAbility: true, effect: 'destroy_marker', targetType: 'any' },
+  { name: "Nephilim", faction: "Celestial", type: "Creature", power: 3, isChampion: false, ability: "Flip: Battle invulnerability this round. Activate: Choose a Seal. Enemy cannot change influence of that Seal until end of round.", hasActivate: true },
+  { name: "Seraphim", faction: "Celestial", type: "Creature", power: 7, isChampion: true, ability: "Champion. Passive: While on a Seal, other Celestials are immune to creature abilities. Activate: Destroy one Marker.", hasTargetedAbility: true, effect: 'destroy_marker', targetType: 'any', hasActivate: true },
   { name: "Thrones", faction: "Angel", type: "Creature", power: 1, isChampion: false, ability: "Flip: Change Influence of empty Seal." },
-  { name: "Alpha", faction: "Lycan", type: "Creature", power: 7, isChampion: false, ability: "Haste: Combat first. Gain 2 Power Markers after victory." },
+  { name: "Alpha", faction: "Lycan", type: "Creature", power: 7, isChampion: false, ability: "Haste: Combat first. Gain 2 Power Markers after victory.", hasHaste: true },
   { name: "Beta", faction: "Lycan", type: "Creature", power: 6, isChampion: false, ability: "Flip: Battle invulnerability. Buff adjacent unit +2." },
   { name: "Omega", faction: "Lycan", type: "Creature", power: 5, isChampion: false, ability: "Flip: +1 Power Marker for every Lycan in Play.", markerPower: 1, needsAllocation: true },
   { name: "Sentinel", faction: "Lycan", type: "Creature", power: 4, isChampion: false, ability: "Flip: Target card loses 2 Power.", markerWeakness: 2, needsAllocation: true },
   { name: "Delta", faction: "Lycan", type: "Creature", power: 3, isChampion: false, ability: "Flip: Buff 3 cards +1 Power each.", markerPower: 3, needsAllocation: true },
   { name: "Luna", faction: "Lycan", type: "Creature", power: 2, isChampion: false, ability: "Final Act: Nullify enemy Influence change." },
-  { name: "Wild Wolf", faction: "Lycan", type: "Creature", power: 1, isChampion: false, ability: "Haste: Resolve combat first." }
+  { name: "Wild Wolf", faction: "Lycan", type: "Creature", power: 1, isChampion: false, ability: "Haste: Resolve combat first.", hasHaste: true }
 ];
 
 export const DARK_POOL: CardData[] = [
@@ -46,7 +46,7 @@ export const DARK_POOL: CardData[] = [
   { name: "Gluttony", faction: "Daemon", type: "Creature", power: 1, isChampion: false, ability: "Flip: Siphon all Power and Weakness Markers in play to self.", hasGlobalAbility: true, effect: 'siphon_all' },
   { name: "Lord", faction: "Vampyre", type: "Creature", power: 7, isChampion: false, ability: "Flip: Gain 1 Power Marker for each Vampyre.", markerPower: 1, needsAllocation: true },
   { name: "Duke", faction: "Vampyre", type: "Creature", power: 6, isChampion: false, ability: "Flip: Spin creature to top of deck. Passive: Friendly count as Vampyre." },
-  { name: "Elder", faction: "Vampyre", type: "Creature", power: 5, isChampion: false, ability: "Haste: Resolve combat first." },
+  { name: "Elder", faction: "Vampyre", type: "Creature", power: 5, isChampion: false, ability: "Haste: Resolve combat first.", hasHaste: true },
   { name: "Noble", faction: "Vampyre", type: "Creature", power: 4, isChampion: false, ability: "Flip: Destroy one creature.", hasTargetedAbility: true, effect: 'destroy', targetType: 'creature' },
   { name: "Regent", faction: "Vampyre", type: "Creature", power: 3, isChampion: false, ability: "Flip: Change Influence of any Seal without a Champion." },
   { name: "Baron", faction: "Vampyre", type: "Creature", power: 2, isChampion: false, ability: "Flip: Nullify Flip here.", hasNullify: true },
