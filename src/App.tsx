@@ -15,6 +15,7 @@ export default function App() {
   const gameRef = useRef<GameController | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [showSelection, setShowSelection] = useState(true);
+  const [zoneSearchModal, setZoneSearchModal] = useState<'limbo' | 'graveyard' | null>(null);
 
   useEffect(() => {
     if (containerRef.current && !gameRef.current) {
@@ -194,6 +195,20 @@ export default function App() {
 
           {/* Bottom Bar */}
           <div className="hud-gradient-bottom p-8 flex flex-col items-center pointer-events-auto">
+            <div className="flex gap-4 mb-3">
+              <button
+                onClick={() => setZoneSearchModal('limbo')}
+                className="px-4 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.65rem] tracking-widest uppercase font-semibold"
+              >
+                Search Limbo
+              </button>
+              <button
+                onClick={() => setZoneSearchModal('graveyard')}
+                className="px-4 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.65rem] tracking-widest uppercase font-semibold"
+              >
+                Search Graveyard
+              </button>
+            </div>
             <div className="text-sm text-gray-300 italic text-center max-w-2xl mb-4">
               {gameState.instructionText}
             </div>
@@ -322,11 +337,164 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Zone Search Modal (Limbo / Graveyard) */}
+      <AnimatePresence>
+        {gameState && zoneSearchModal && (
+          <ZoneSearchModal
+            zone={zoneSearchModal}
+            playerCards={zoneSearchModal === 'limbo' ? (gameState.playerLimboCards ?? []) : (gameState.playerGraveyardCards ?? [])}
+            enemyCards={zoneSearchModal === 'limbo' ? (gameState.enemyLimboCards ?? []) : (gameState.enemyGraveyardCards ?? [])}
+            isSelectingTarget={gameState.isSelectingLimboTarget === true && zoneSearchModal === 'limbo'}
+            onClose={() => setZoneSearchModal(null)}
+            onSelectLimboCard={(zone, index) => {
+              gameRef.current?.selectLimboCardForAbility(zone, index);
+              setZoneSearchModal(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Version Badge */}
       <div className="absolute bottom-4 right-6 z-[120] text-[0.65rem] tracking-widest text-gray-500 pointer-events-none">
         VERSION PUBLISHED: <span className="text-gray-300">{GAME_VERSION}</span>
       </div>
     </div>
+  );
+}
+
+/** Modal to search/browse Limbo or Graveyard; supports selecting a card for Sentinel ability when isSelectingTarget. */
+function ZoneSearchModal({
+  zone,
+  playerCards,
+  enemyCards,
+  isSelectingTarget,
+  onClose,
+  onSelectLimboCard
+}: {
+  zone: 'limbo' | 'graveyard';
+  playerCards: HoveredCardInfo[];
+  enemyCards: HoveredCardInfo[];
+  isSelectingTarget: boolean;
+  onClose: () => void;
+  onSelectLimboCard: (zone: 'player' | 'enemy', index: number) => void;
+}) {
+  const [filter, setFilter] = useState('');
+  const zoneLabel = zone === 'limbo' ? 'Limbo' : 'Graveyard';
+
+  const filterCards = (cards: HoveredCardInfo[]) =>
+    cards
+      .map((card, index) => ({ card, index }))
+      .filter(
+        ({ card: c }) =>
+          !filter.trim() ||
+          c.name.toLowerCase().includes(filter.toLowerCase()) ||
+          c.type.toLowerCase().includes(filter.toLowerCase()) ||
+          c.faction.toLowerCase().includes(filter.toLowerCase())
+      );
+
+  const playerFiltered = filterCards(playerCards);
+  const enemyFiltered = filterCards(enemyCards);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className="glass-panel border border-[#00f2ff]/40 bg-black/90 rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-4 border-b border-white/10 flex items-center justify-between gap-4">
+          <h2 className="text-lg tracking-widest uppercase text-[#00f2ff] font-bold">
+            Search {zoneLabel}
+          </h2>
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 bg-white/5 border border-white/20 hover:border-white/40 text-[0.65rem] tracking-widest uppercase"
+          >
+            Close
+          </button>
+        </div>
+        <div className="p-4 border-b border-white/10">
+          <input
+            type="text"
+            placeholder="Filter by name, type, or faction..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded text-sm text-white placeholder-gray-500 focus:border-[#00f2ff]/60 focus:outline-none"
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          <section>
+            <h3 className="text-[0.7rem] text-[#00f2ff] uppercase tracking-widest mb-2">Your {zoneLabel}</h3>
+            {playerFiltered.length === 0 ? (
+              <p className="text-[0.7rem] text-gray-500">No cards</p>
+            ) : (
+              <ul className="space-y-1">
+                {playerFiltered.map(({ card, index: originalIndex }) => {
+                  const clickable = isSelectingTarget && zone === 'limbo';
+                  return (
+                    <li
+                      key={`player-${originalIndex}-${card.name}`}
+                      onClick={() => clickable && onSelectLimboCard('player', originalIndex)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded border text-left text-[0.75rem] ${
+                        clickable
+                          ? 'border-[#00f2ff]/50 cursor-pointer hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]'
+                          : 'border-white/10 bg-white/5'
+                      }`}
+                    >
+                      <span className="font-semibold text-white shrink-0 w-28 truncate">{card.name}</span>
+                      <span className="text-[#00f2ff] shrink-0">P{card.power + card.powerMarkers - card.weaknessMarkers}</span>
+                      <span className="text-gray-400 shrink-0">{card.type}</span>
+                      <span className="text-gray-500 truncate flex-1 min-w-0">{card.ability}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+          <section>
+            <h3 className="text-[0.7rem] text-[#ff0044]/90 uppercase tracking-widest mb-2">Enemy {zoneLabel}</h3>
+            {enemyFiltered.length === 0 ? (
+              <p className="text-[0.7rem] text-gray-500">No cards</p>
+            ) : (
+              <ul className="space-y-1">
+                {enemyFiltered.map(({ card, index: originalIndex }) => {
+                  const clickable = isSelectingTarget && zone === 'limbo';
+                  return (
+                    <li
+                      key={`enemy-${originalIndex}-${card.name}`}
+                      onClick={() => clickable && onSelectLimboCard('enemy', originalIndex)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded border text-left text-[0.75rem] ${
+                        clickable
+                          ? 'border-[#00f2ff]/50 cursor-pointer hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]'
+                          : 'border-white/10 bg-white/5'
+                      }`}
+                    >
+                      <span className="font-semibold text-white shrink-0 w-28 truncate">{card.name}</span>
+                      <span className="text-[#00f2ff] shrink-0">P{card.power + card.powerMarkers - card.weaknessMarkers}</span>
+                      <span className="text-gray-400 shrink-0">{card.type}</span>
+                      <span className="text-gray-500 truncate flex-1 min-w-0">{card.ability}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        </div>
+        {isSelectingTarget && zone === 'limbo' && (
+          <div className="p-3 border-t border-white/10 text-[0.65rem] text-gray-400 text-center">
+            Click a creature to add its Power to Sentinel.
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
   );
 }
 

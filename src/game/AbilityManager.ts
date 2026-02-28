@@ -231,7 +231,8 @@ export class AbilityManager {
       }
       this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
-        instructionText: 'Sentinel: Choose a creature in Limbo (power value added to Sentinel).'
+        instructionText: 'Sentinel: Choose a creature in Limbo (power value added to Sentinel).',
+        isSelectingLimboTarget: true
       });
       this.controller.zoomOut();
       return new Promise<void>((resolve) => {

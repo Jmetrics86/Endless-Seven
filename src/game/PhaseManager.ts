@@ -145,10 +145,14 @@ export class PhaseManager {
 
     if (pHaste || eHaste) {
       this.controller.updateState({ phaseStep: "Step 0: Haste Strike" });
-      if (pCard && eCard) await this.controller.handleBattle(pCard, eCard, idx, false);
-      else if (pCard && seal.champion && seal.champion.data.isEnemy) await this.controller.handleBattle(pCard, seal.champion, idx, true);
-      else if (eCard && seal.champion && !seal.champion.data.isEnemy) await this.controller.handleBattle(eCard, seal.champion, idx, true);
-      
+      // Champion must be battled first (same priority as Step C: Combat); only then slot vs slot.
+      if (pCard && seal.champion && seal.champion.data.isEnemy) {
+        await this.controller.handleBattle(pCard, seal.champion, idx, true);
+      } else if (eCard && seal.champion && !seal.champion.data.isEnemy) {
+        await this.controller.handleBattle(eCard, seal.champion, idx, true);
+      } else if (pCard && eCard) {
+        await this.controller.handleBattle(pCard, eCard, idx, false);
+      }
       pCard = this.controller.playerBattlefield[idx];
       eCard = this.controller.enemyBattlefield[idx];
     }

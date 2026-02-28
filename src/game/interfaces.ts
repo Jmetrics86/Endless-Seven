@@ -51,4 +51,5 @@ export interface IGameController {
   startResolution(): Promise<void>;
   resolveSeal(idx: number): Promise<void>;
   forceSkip(): void;
+  selectLimboCardForAbility(zone: 'player' | 'enemy', index: number): void;
 }

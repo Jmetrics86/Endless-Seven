@@ -80,7 +80,11 @@ export class GameController implements IGameController {
       phaseStep: '',
       powerPool: 0,
       weaknessPool: 0,
-      logs: []
+      logs: [],
+      playerLimboCards: [],
+      enemyLimboCards: [],
+      playerGraveyardCards: [],
+      enemyGraveyardCards: []
     };
 
     this.uiManager = new UIManager(initialState, (s) => {
@@ -277,8 +281,42 @@ export class GameController implements IGameController {
     this.uiManager.addLog(msg);
   }
 
+  private cardToHoveredInfo(card: CardEntity): HoveredCardInfo {
+    return {
+      name: card.data.name,
+      faction: card.data.faction,
+      power: card.data.power,
+      type: card.data.type,
+      isChampion: card.data.isChampion,
+      ability: card.data.ability,
+      powerMarkers: card.data.powerMarkers,
+      weaknessMarkers: card.data.weaknessMarkers,
+      faceArtPath: CARD_ART_PATHS[card.data.name]
+    };
+  }
+
   public updateState(patch: Partial<GameState>) {
-    this.uiManager.updateState(patch, this.playerDeck.length, this.enemyDeck.length, this.playerGraveyard.length, this.enemyGraveyard.length);
+    const zonePatch: Partial<GameState> = {
+      playerLimboCards: this.playerLimbo.map((c) => this.cardToHoveredInfo(c)),
+      enemyLimboCards: this.enemyLimbo.map((c) => this.cardToHoveredInfo(c)),
+      playerGraveyardCards: this.playerGraveyard.map((c) => this.cardToHoveredInfo(c)),
+      enemyGraveyardCards: this.enemyGraveyard.map((c) => this.cardToHoveredInfo(c))
+    };
+    this.uiManager.updateState({ ...zonePatch, ...patch }, this.playerDeck.length, this.enemyDeck.length, this.playerGraveyard.length, this.enemyGraveyard.length);
+  }
+
+  /** Called from UI when user selects a card from the Limbo search modal (e.g. for Sentinel ability). */
+  public selectLimboCardForAbility(zone: 'player' | 'enemy', index: number) {
+    const limbo = zone === 'player' ? this.playerLimbo : this.enemyLimbo;
+    const card = limbo[index];
+    if (!card || this.state.currentPhase !== Phase.ABILITY_TARGETING || !this.pendingAbilityData?.effect) return;
+    if (this.pendingAbilityData.effect !== 'sentinel_absorb') return;
+    this.abilityManager.applyAbilityEffect(card, this.pendingAbilityData);
+    this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '', isSelectingLimboTarget: false });
+    this.pendingAbilityData = null;
+    if (this.resolutionCallback) this.resolutionCallback();
+    this.resolutionCallback = null;
+    if (this.currentResolvingSealIndex !== -1) this.zoomIn(this.currentResolvingSealIndex);
   }
 
   public zoomOut() {
@@ -579,7 +617,7 @@ export class GameController implements IGameController {
           this.abilityManager.applyAbilityEffect(card, this.pendingAbilityData);
           const phaseAfterEffect = this.state.currentPhase as Phase;
           if (phaseAfterEffect !== Phase.GAME_OVER) {
-            this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
+            this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '', isSelectingLimboTarget: false });
             if (this.currentResolvingSealIndex !== -1) this.zoomIn(this.currentResolvingSealIndex);
           }
           this.pendingAbilityData = null;

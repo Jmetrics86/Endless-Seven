@@ -77,4 +77,11 @@ export interface GameState {
   logs: string[];
   /** Set when a card is hovered (for small-screen magnified preview). Cleared when not hovered or when a prompt is active. */
   hoveredCard?: HoveredCardInfo | null;
+  /** Card summaries for Limbo/Graveyard search UI. Updated whenever state is pushed. */
+  playerLimboCards: HoveredCardInfo[];
+  enemyLimboCards: HoveredCardInfo[];
+  playerGraveyardCards: HoveredCardInfo[];
+  enemyGraveyardCards: HoveredCardInfo[];
+  /** True when in ABILITY_TARGETING and the target must be a creature in Limbo (e.g. Sentinel). */
+  isSelectingLimboTarget?: boolean;
 }
