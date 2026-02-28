@@ -49,6 +49,7 @@ export class GameController implements IGameController {
   private activeSelection: CardEntity | null = null;
   public currentResolvingSealIndex: number = -1;
   private selectedObject: CardEntity | null = null;
+  public pendingBaronSwapSlot: number | null = null;
 
   public pendingAbilityData: any = null;
   public resolutionCallback: (() => void) | null = null;
@@ -84,7 +85,9 @@ export class GameController implements IGameController {
       playerLimboCards: [],
       enemyLimboCards: [],
       playerGraveyardCards: [],
-      enemyGraveyardCards: []
+      enemyGraveyardCards: [],
+      playerDeckCards: [],
+      enemyDeckCards: []
     };
 
     this.uiManager = new UIManager(initialState, (s) => {
@@ -295,12 +298,28 @@ export class GameController implements IGameController {
     };
   }
 
+  private cardDataToHoveredInfo(data: CardData): HoveredCardInfo {
+    return {
+      name: data.name,
+      faction: data.faction,
+      power: data.power,
+      type: data.type,
+      isChampion: data.isChampion,
+      ability: data.ability,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+      faceArtPath: CARD_ART_PATHS[data.name]
+    };
+  }
+
   public updateState(patch: Partial<GameState>) {
     const zonePatch: Partial<GameState> = {
       playerLimboCards: this.playerLimbo.map((c) => this.cardToHoveredInfo(c)),
       enemyLimboCards: this.enemyLimbo.map((c) => this.cardToHoveredInfo(c)),
       playerGraveyardCards: this.playerGraveyard.map((c) => this.cardToHoveredInfo(c)),
-      enemyGraveyardCards: this.enemyGraveyard.map((c) => this.cardToHoveredInfo(c))
+      enemyGraveyardCards: this.enemyGraveyard.map((c) => this.cardToHoveredInfo(c)),
+      playerDeckCards: this.playerDeck.map((d) => this.cardDataToHoveredInfo(d)),
+      enemyDeckCards: this.enemyDeck.map((d) => this.cardDataToHoveredInfo(d))
     };
     this.uiManager.updateState({ ...zonePatch, ...patch }, this.playerDeck.length, this.enemyDeck.length, this.playerGraveyard.length, this.enemyGraveyard.length);
   }
@@ -478,19 +497,15 @@ export class GameController implements IGameController {
   }
 
   private handleMouseMove(event: MouseEvent) {
-    // Don't overwrite instruction text when a decision dialog or targeting prompt is active
+    // When a decision or targeting prompt is active, still allow card hover preview but don't overwrite instruction text
     const promptActive = !!this.state.decisionContext ||
       this.state.currentPhase === Phase.ABILITY_TARGETING ||
       this.state.currentPhase === Phase.SEAL_TARGETING ||
       this.state.currentPhase === Phase.COUNTER_ALLOCATION ||
       this.state.currentPhase === Phase.DELTA_BUFF_TARGETING;
-    if (promptActive) {
-      this.selectedObject = null;
-      this.updateState({ hoveredCard: null });
-      return;
-    }
 
-    const allCards = [...this.playerHand, ...this.playerBattlefield, ...this.enemyBattlefield, ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[];
+    const sealChampions = this.seals.map(s => s.champion).filter((c): c is CardEntity => c !== null);
+    const allCards = [...this.playerHand, ...this.playerBattlefield, ...this.enemyBattlefield, ...this.playerLimbo, ...this.enemyLimbo, ...sealChampions].filter(c => c !== null) as CardEntity[];
     const intersects = this.inputHandler.raycaster.intersectObjects(allCards.map(c => c.mesh), true);
 
     if (intersects.length > 0) {
@@ -510,7 +525,11 @@ export class GameController implements IGameController {
           weaknessMarkers: card.data.weaknessMarkers,
           faceArtPath: CARD_ART_PATHS[card.data.name]
         };
-        this.updateState({ instructionText: `${card.data.name}: ${card.data.ability}`, hoveredCard: hovered });
+        if (promptActive) {
+          this.updateState({ hoveredCard: hovered });
+        } else {
+          this.updateState({ instructionText: `${card.data.name}: ${card.data.ability}`, hoveredCard: hovered });
+        }
       }
     } else {
       this.selectedObject = null;
@@ -525,8 +544,40 @@ export class GameController implements IGameController {
         let obj = limboIntersects[0].object;
         while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
         const card = this.playerLimbo.find(c => c.mesh === obj);
+        if (card && this.pendingBaronSwapSlot !== null) {
+          const slot = this.pendingBaronSwapSlot;
+          const baron = this.playerBattlefield[slot];
+          if (baron?.data.hasSwapAbility) {
+            this.playerBattlefield[slot] = null;
+            this.playerLimbo = this.playerLimbo.filter(c => c !== card);
+            this.playerLimbo.push(baron);
+            this.playerBattlefield[slot] = card;
+            gsap.to(baron.mesh.position, { x: 15, y: 0.2 + (this.playerLimbo.length * 0.05), z: 6, duration: 0.4 });
+            gsap.to(baron.mesh.rotation, { x: Math.PI, y: 0, z: 0, duration: 0.4 });
+            gsap.to(card.mesh.position, { x: (slot - 3) * GAME_CONSTANTS.SLOT_SPACING, y: 0.1, z: 3.2, duration: 0.4 });
+            gsap.to(card.mesh.rotation, { x: Math.PI, y: 0, z: 0, duration: 0.4 });
+            card.applyBackTextureIfNeeded();
+            this.addLog(`Baron swaps with ${card.data.name} in Limbo.`);
+            this.pendingBaronSwapSlot = null;
+            this.updateState({ instructionText: '' });
+          }
+          return;
+        }
         if (card && card.data.hasLimboAbility) {
           this.abilityManager.handleLimboAbility(card);
+          return;
+        }
+      }
+      const playerBfCards = this.playerBattlefield.filter(c => c !== null) as CardEntity[];
+      const bfIntersects = this.inputHandler.raycaster.intersectObjects(playerBfCards.map(c => c.mesh), true);
+      if (bfIntersects.length > 0 && this.pendingBaronSwapSlot === null) {
+        let obj = bfIntersects[0].object;
+        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
+        const card = playerBfCards.find(c => c.mesh === obj);
+        if (card?.data.hasSwapAbility) {
+          const slot = this.playerBattlefield.indexOf(card);
+          this.pendingBaronSwapSlot = slot;
+          this.updateState({ instructionText: "Baron: Select a creature in your Limbo to swap with Baron." });
           return;
         }
       }
@@ -557,6 +608,7 @@ export class GameController implements IGameController {
               duration: 0.5
             });
             gsap.to(card.mesh.rotation, { x: Math.PI, y: 0, z: 0, duration: 0.5 });
+            card.applyBackTextureIfNeeded();
             this.activeSelection = null;
           }
         }
@@ -602,11 +654,17 @@ export class GameController implements IGameController {
     } else if (this.state.currentPhase === Phase.ABILITY_TARGETING) {
       const forSentinel = this.pendingAbilityData?.effect === 'sentinel_absorb';
       const forSaintMichael = this.pendingAbilityData?.effect === 'saint_michael_destroy';
-      const allBoard = forSaintMichael && this.pendingAbilityData?.validTargets?.length
-        ? (this.pendingAbilityData.validTargets as CardEntity[])
-        : forSentinel
-          ? ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion), ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[])
-          : ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[]);
+      const forChampion = this.pendingAbilityData?.targetType === 'champion';
+      let allBoard: CardEntity[];
+      if (this.pendingAbilityData?.validTargets?.length) {
+        allBoard = this.pendingAbilityData.validTargets as CardEntity[];
+      } else if (forSentinel) {
+        allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion), ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[];
+      } else if (forChampion) {
+        allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.isChampion) as CardEntity[];
+      } else {
+        allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+      }
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
         let obj = intersects[0].object;
@@ -614,6 +672,7 @@ export class GameController implements IGameController {
         const card = allBoard.find(c => c.mesh === obj);
         if (card) {
           if (forSentinel && !this.playerLimbo.includes(card) && !this.enemyLimbo.includes(card)) return; // Sentinel must target Limbo
+          if (forChampion && !card.data.isChampion) return; // Lord must target Champion
           this.abilityManager.applyAbilityEffect(card, this.pendingAbilityData);
           const phaseAfterEffect = this.state.currentPhase as Phase;
           if (phaseAfterEffect !== Phase.GAME_OVER) {

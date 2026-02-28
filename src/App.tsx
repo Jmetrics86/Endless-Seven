@@ -15,7 +15,7 @@ export default function App() {
   const gameRef = useRef<GameController | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [showSelection, setShowSelection] = useState(true);
-  const [zoneSearchModal, setZoneSearchModal] = useState<'limbo' | 'graveyard' | null>(null);
+  const [zoneSearchModal, setZoneSearchModal] = useState<'limbo' | 'graveyard' | 'deck' | null>(null);
 
   useEffect(() => {
     if (containerRef.current && !gameRef.current) {
@@ -162,10 +162,32 @@ export default function App() {
             </div>
 
             <div className="flex flex-col items-center gap-2">
-              <div className="glass-panel px-6 py-2 rounded-b-xl border-t-0 flex gap-8 items-center">
-                <div className="text-center">
-                  <div className="text-lg text-white">ROUND {gameState.currentRound}</div>
-                  <div className="text-[0.6rem] text-gray-500 uppercase tracking-widest">Awaiting Command</div>
+              <div className="glass-panel px-6 py-2 rounded-b-xl border-t-0 flex gap-6 items-center flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="text-center">
+                    <div className="text-lg text-white">ROUND {gameState.currentRound}</div>
+                    <div className="text-[0.6rem] text-gray-500 uppercase tracking-widest">Awaiting Command</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setZoneSearchModal('limbo')}
+                      className="px-3 py-1.5 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
+                    >
+                      Search Limbo
+                    </button>
+                    <button
+                      onClick={() => setZoneSearchModal('graveyard')}
+                      className="px-3 py-1.5 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
+                    >
+                      Search Graveyard
+                    </button>
+                    <button
+                      onClick={() => setZoneSearchModal('deck')}
+                      className="px-3 py-1.5 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
+                    >
+                      Search Deck
+                    </button>
+                  </div>
                 </div>
                 <div className="h-8 w-px bg-white/20" />
                 <div className="text-center min-w-[150px]">
@@ -195,20 +217,6 @@ export default function App() {
 
           {/* Bottom Bar */}
           <div className="hud-gradient-bottom p-8 flex flex-col items-center pointer-events-auto">
-            <div className="flex gap-4 mb-3">
-              <button
-                onClick={() => setZoneSearchModal('limbo')}
-                className="px-4 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.65rem] tracking-widest uppercase font-semibold"
-              >
-                Search Limbo
-              </button>
-              <button
-                onClick={() => setZoneSearchModal('graveyard')}
-                className="px-4 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.65rem] tracking-widest uppercase font-semibold"
-              >
-                Search Graveyard
-              </button>
-            </div>
             <div className="text-sm text-gray-300 italic text-center max-w-2xl mb-4">
               {gameState.instructionText}
             </div>
@@ -304,7 +312,42 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && gameState.decisionContext !== 'ALMIGHTY_MARKER_TYPE' && (
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext === 'LUST_SEAL_INFLUENCE' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+          >
+            <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">Lust — Choose Seal Influence</div>
+            <div className="text-xs text-gray-200 text-center max-w-xs">
+              {gameState.instructionText}
+            </div>
+            <div className="flex gap-4 mt-1">
+              <button
+                onClick={() => {
+                  (gameRef.current as any).alignmentChoiceCallback?.(Alignment.LIGHT);
+                  (gameRef.current as any).alignmentChoiceCallback = null;
+                }}
+                className="px-5 py-2 bg-amber-500/20 border border-amber-400 text-amber-300 hover:bg-amber-500/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                Light
+              </button>
+              <button
+                onClick={() => {
+                  (gameRef.current as any).alignmentChoiceCallback?.(Alignment.DARK);
+                  (gameRef.current as any).alignmentChoiceCallback = null;
+                }}
+                className="px-5 py-2 bg-purple-600/20 border border-purple-400 text-purple-300 hover:bg-purple-600/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                Dark
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && gameState.decisionContext !== 'ALMIGHTY_MARKER_TYPE' && gameState.decisionContext !== 'LUST_SEAL_INFLUENCE' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -337,13 +380,21 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Zone Search Modal (Limbo / Graveyard) */}
+      {/* Zone Search Modal (Limbo / Graveyard / Deck) */}
       <AnimatePresence>
         {gameState && zoneSearchModal && (
           <ZoneSearchModal
             zone={zoneSearchModal}
-            playerCards={zoneSearchModal === 'limbo' ? (gameState.playerLimboCards ?? []) : (gameState.playerGraveyardCards ?? [])}
-            enemyCards={zoneSearchModal === 'limbo' ? (gameState.enemyLimboCards ?? []) : (gameState.enemyGraveyardCards ?? [])}
+            playerCards={
+              zoneSearchModal === 'limbo' ? (gameState.playerLimboCards ?? [])
+              : zoneSearchModal === 'graveyard' ? (gameState.playerGraveyardCards ?? [])
+              : (gameState.playerDeckCards ?? [])
+            }
+            enemyCards={
+              zoneSearchModal === 'limbo' ? (gameState.enemyLimboCards ?? [])
+              : zoneSearchModal === 'graveyard' ? (gameState.enemyGraveyardCards ?? [])
+              : (gameState.enemyDeckCards ?? [])
+            }
             isSelectingTarget={gameState.isSelectingLimboTarget === true && zoneSearchModal === 'limbo'}
             onClose={() => setZoneSearchModal(null)}
             onSelectLimboCard={(zone, index) => {
@@ -362,7 +413,7 @@ export default function App() {
   );
 }
 
-/** Modal to search/browse Limbo or Graveyard; supports selecting a card for Sentinel ability when isSelectingTarget. */
+/** Modal to search/browse Limbo, Graveyard, or Deck; supports selecting a card for Sentinel ability when isSelectingTarget (Limbo only). */
 function ZoneSearchModal({
   zone,
   playerCards,
@@ -371,7 +422,7 @@ function ZoneSearchModal({
   onClose,
   onSelectLimboCard
 }: {
-  zone: 'limbo' | 'graveyard';
+  zone: 'limbo' | 'graveyard' | 'deck';
   playerCards: HoveredCardInfo[];
   enemyCards: HoveredCardInfo[];
   isSelectingTarget: boolean;
@@ -379,7 +430,7 @@ function ZoneSearchModal({
   onSelectLimboCard: (zone: 'player' | 'enemy', index: number) => void;
 }) {
   const [filter, setFilter] = useState('');
-  const zoneLabel = zone === 'limbo' ? 'Limbo' : 'Graveyard';
+  const zoneLabel = zone === 'limbo' ? 'Limbo' : zone === 'graveyard' ? 'Graveyard' : 'Deck';
 
   const filterCards = (cards: HoveredCardInfo[]) =>
     cards
@@ -443,6 +494,7 @@ function ZoneSearchModal({
                     <li
                       key={`player-${originalIndex}-${card.name}`}
                       onClick={() => clickable && onSelectLimboCard('player', originalIndex)}
+                      role={clickable ? 'button' : undefined}
                       className={`flex items-center gap-3 px-3 py-2 rounded border text-left text-[0.75rem] ${
                         clickable
                           ? 'border-[#00f2ff]/50 cursor-pointer hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]'
@@ -471,6 +523,7 @@ function ZoneSearchModal({
                     <li
                       key={`enemy-${originalIndex}-${card.name}`}
                       onClick={() => clickable && onSelectLimboCard('enemy', originalIndex)}
+                      role={clickable ? 'button' : undefined}
                       className={`flex items-center gap-3 px-3 py-2 rounded border text-left text-[0.75rem] ${
                         clickable
                           ? 'border-[#00f2ff]/50 cursor-pointer hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]'
@@ -513,14 +566,14 @@ function AlignmentCard({ title, description, icon, color, onClick }: any) {
   );
 }
 
-/** Magnified card preview over the interaction log; disappears when not hovering a card. */
+/** Magnified card preview over the interaction log; disappears when not hovering a card. Uses z-[90] so it appears above decision dialogs (z-[80]) when you need to read cards during prompts. */
 function CardPreviewOverlay({ card }: { card: HoveredCardInfo }) {
   const effectivePower = card.power + card.powerMarkers - card.weaknessMarkers;
   const faceSrc = card.faceArtPath ? cardArtUrl(card.faceArtPath) : undefined;
 
   return (
     <div
-      className="absolute right-0 top-1/2 -translate-y-1/2 z-20 pointer-events-none flex items-center justify-center p-2"
+      className="absolute right-0 top-1/2 -translate-y-1/2 z-[90] pointer-events-none flex items-center justify-center p-2"
       style={{
         width: 'min(20rem, 92vw)',
         height: 'min(32rem, 72vh)'

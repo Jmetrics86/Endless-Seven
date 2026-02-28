@@ -25,6 +25,7 @@ export interface IGameController {
   phaseManager: any;
   isProcessing: boolean;
   currentResolvingSealIndex: number;
+  cardsThatBattledThisRound: CardEntity[];
   resolutionCallback: (() => void) | null;
   pendingAbilityData: any;
   nullifyCallback: ((confirmed: boolean) => void) | null;

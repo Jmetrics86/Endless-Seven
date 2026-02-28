@@ -39,6 +39,16 @@ export interface CardData {
   hasHaste?: boolean;
   hasLimboAbility?: boolean;
   hasActivate?: boolean;
+  /** Baron: Swap with creature in Limbo you control */
+  hasSwapAbility?: boolean;
+  /** Fledgeling: Cannot battle or be battled */
+  cannotBattleOrBeBattled?: boolean;
+  /** Fledgeling: Sacrifice at end of turn */
+  sacrificeEndOfTurn?: boolean;
+  /** Sloth: Unaffected by abilities */
+  abilityImmune?: boolean;
+  /** Lust: After sacrifice, may change seal influence if no champion */
+  hasLustSealEffect?: boolean;
 }
 
 /** Card summary for magnified hover preview (small screens). */
@@ -71,7 +81,9 @@ export interface GameState {
   weaknessPool: number;
   abilitySourceCardName?: string;
   lockedSealIndex?: number;
-  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY' | 'ALMIGHTY_MARKER_TYPE';
+  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY' | 'ALMIGHTY_MARKER_TYPE' | 'LUST_SEAL_INFLUENCE';
+  /** Seal index when choosing influence (e.g. Lust effect). */
+  sealIndexForChoice?: number;
   /** Stable message for the current decision dialog (not overwritten by hover). */
   decisionMessage?: string;
   logs: string[];
@@ -82,6 +94,9 @@ export interface GameState {
   enemyLimboCards: HoveredCardInfo[];
   playerGraveyardCards: HoveredCardInfo[];
   enemyGraveyardCards: HoveredCardInfo[];
+  /** Card summaries for Deck search UI (read-only browse). */
+  playerDeckCards: HoveredCardInfo[];
+  enemyDeckCards: HoveredCardInfo[];
   /** True when in ABILITY_TARGETING and the target must be a creature in Limbo (e.g. Sentinel). */
   isSelectingLimboTarget?: boolean;
 }

@@ -31,6 +31,7 @@ export class PhaseManager {
       card.mesh.position.set(-15, 2, 6); // Deck position
       this.controller.sceneManager.scene.add(card.mesh);
       this.controller.playerHand.push(card);
+      card.applyBackTextureIfNeeded(); // All cards share same back graphic; ensure it is applied as soon as ready
 
       const offset = (i - 3.5);
       gsap.to(card.mesh.position, {
@@ -63,6 +64,7 @@ export class PhaseManager {
       card.mesh.rotation.x = Math.PI;
       this.controller.sceneManager.scene.add(card.mesh);
       this.controller.enemyBattlefield[slotIdx] = card;
+      card.applyBackTextureIfNeeded(); // All cards share same back graphic; ensure it is applied as soon as ready
 
       gsap.to(card.mesh.position, {
         x: (slotIdx - 3) * GAME_CONSTANTS.SLOT_SPACING,
@@ -78,6 +80,7 @@ export class PhaseManager {
   public endPrep() {
     if (this.controller.isProcessing) return;
     this.controller.isProcessing = true;
+    (this.controller as any).pendingBaronSwapSlot = null;
     this.controller.addLog("Ending Prep Phase. Purging hand...");
     this.controller.updateState({ phaseStep: 'Purging hand...' });
 
@@ -143,7 +146,7 @@ export class PhaseManager {
     const pHaste = pCard && pCard.data.hasHaste;
     const eHaste = eCard && eCard.data.hasHaste;
 
-    if (pHaste || eHaste) {
+    if ((pHaste || eHaste) && !pCard?.data.cannotBattleOrBeBattled && !eCard?.data.cannotBattleOrBeBattled) {
       this.controller.updateState({ phaseStep: "Step 0: Haste Strike" });
       // Champion must be battled first (same priority as Step C: Combat); only then slot vs slot.
       if (pCard && seal.champion && seal.champion.data.isEnemy) {
@@ -228,22 +231,56 @@ export class PhaseManager {
       }
       
       // Invulnerability
-      if (current.data.ability.toLowerCase().includes("invulnerability") || current.data.name === "Nephilim") {
+      if (current.data.ability.toLowerCase().includes("invulnerability") || current.data.name === "Nephilim" || current.data.name === "Greed") {
         current.data.isInvincible = true;
-        this.controller.addLog(`${current.data.name} gains Invulnerability`);
+        this.controller.addLog(`${current.data.name} gains battle invulnerability this turn`);
+      }
+
+      // Wrath: Flip — -1 Weakness on each enemy creature (no allocation)
+      if (current.data.name === "Wrath") {
+        const enemyCreatures = (side === 'player'
+          ? [...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion).filter(c => c !== null && c!.data.isEnemy)]
+          : [...this.controller.playerBattlefield, ...this.controller.seals.map(s => s.champion).filter(c => c !== null && !c!.data.isEnemy)]
+        ).filter(c => c !== null) as CardEntity[];
+        enemyCreatures.forEach(c => {
+          if (!this.controller.abilityManager.isImmuneToAbilities(c, current)) {
+            c.data.weaknessMarkers += 1;
+            c.updateVisualMarkers();
+          }
+        });
+        this.controller.addLog(`${current.data.name} places a -1 Weakness Marker on each enemy creature.`);
+      }
+
+      // Pride: Flip — -3 Weakness on creature across; Action — +2 Power on each adjacent
+      if (current.data.name === "Pride") {
+        if (opponent && !this.controller.abilityManager.isImmuneToAbilities(opponent, current)) {
+          opponent.data.weaknessMarkers += 3;
+          opponent.updateVisualMarkers();
+          this.controller.addLog(`${current.data.name} places -3 Weakness on ${opponent.data.name}.`);
+        }
+        const neighbors = [];
+        if (idx > 0) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx - 1] : this.controller.enemyBattlefield[idx - 1]);
+        if (idx < 6) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx + 1] : this.controller.enemyBattlefield[idx + 1]);
+        neighbors.forEach(n => {
+          if (n && !this.controller.abilityManager.isImmuneToAbilities(n, current)) {
+            n.data.powerMarkers += 2;
+            n.updateVisualMarkers();
+          }
+        });
+        this.controller.addLog(`${current.data.name} places +2 Power on each adjacent creature.`);
       }
 
       // Nephilim Activate
       if (isActivate && current.data.name === "Nephilim") {
         await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
       }
-      // The Almighty, The Allotter, Saint Michael, The Spinner: Activate
-      if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner")) {
+      // The Almighty, The Allotter, Saint Michael, The Spinner, Lord, Greed: Activate
+      if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner" || current.data.name === "Lord" || current.data.name === "Greed")) {
         await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
       }
 
-      // Faction Presence (The Spinner: Light in play; Lord: Vampyre in play; Omega: Lycan in play and in Limbo)
-      if (current.data.name === "The Spinner" || current.data.name === "Lord") {
+      // Faction Presence: The Spinner (Light) on Flip; Lord is Activate-only (handled in handleActivateAbility)
+      if (current.data.name === "The Spinner") {
         const count = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
           .filter(c => c !== null && c.data.faction === current!.data.faction).length;
         current.data.powerMarkers += count;
@@ -343,33 +380,51 @@ export class PhaseManager {
           this.controller.addLog(`${current.data.name} forces mutual sacrifice with ${opponent.data.name}`);
           this.controller.destroyCard(current, side === 'enemy', idx, false);
           this.controller.destroyCard(opponent, side === 'player' ? false : true, idx, false);
+          // Effect: After sacrifice, if the Seal has no Champion, you may change the Influence of the seal
+          const seal = this.controller.seals[idx];
+          if (current.data.hasLustSealEffect && !seal.champion) {
+            if (side === 'enemy') {
+              const validSeals = this.controller.seals.filter(s => s.index === idx && !s.champion);
+              if (validSeals.length > 0) {
+                const align = Math.random() < 0.5 ? Alignment.LIGHT : Alignment.DARK;
+                this.controller.addLog(`Lust's effect: Seal ${idx + 1} influence changed.`);
+                await this.controller.claimSeal(idx, align);
+              }
+            } else {
+              const hasValid = this.controller.seals[idx] && !this.controller.seals[idx].champion;
+              if (hasValid) {
+                this.controller.updateState({
+                  currentPhase: Phase.RESOLUTION,
+                  instructionText: "Lust: Seal has no Champion. Choose new Influence for the Seal (Light or Dark).",
+                  decisionContext: 'LUST_SEAL_INFLUENCE',
+                  sealIndexForChoice: idx
+                });
+                this.controller.zoomOut();
+                const chosenAlign = await new Promise<Alignment>((resolve) => {
+                  (this.controller as any).alignmentChoiceCallback = resolve;
+                });
+                this.controller.updateState({ decisionContext: undefined, sealIndexForChoice: undefined });
+                this.controller.addLog(`Lust's effect: Seal ${idx + 1} influence changed.`);
+                await this.controller.claimSeal(idx, chosenAlign);
+              }
+            }
+          }
         } else if (opponent) {
           this.controller.addLog(`${opponent.data.name} is immune to ${current.data.name}'s sacrifice`);
         }
       }
 
-      // Duke
-      if (current.data.name === "Duke") {
-        if (opponent && !this.controller.abilityManager.isImmuneToAbilities(opponent, current)) {
-          this.controller.addLog(`${current.data.name} spins ${opponent.data.name} back to deck`);
-          const deck = side === 'player' ? this.controller.enemyDeck : this.controller.playerDeck;
-          const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = opponent.data;
-          deck.push({ ...baseData });
-          gsap.to(opponent.mesh.position, { y: 10, duration: 0.5, onComplete: () => {
-            this.controller.disposeCard(opponent!);
-          }});
-          if (side === 'player') this.controller.enemyBattlefield[idx] = null;
-          else this.controller.playerBattlefield[idx] = null;
-        } else if (opponent) {
-          this.controller.addLog(`${opponent.data.name} is immune to ${current.data.name}'s spin`);
-        }
-      }
+      // Duke: Flip = place any creature in play on top of that player's deck (handled via hasTargetedAbility)
 
       if (current.data.needsAllocation) {
         await this.controller.allocateCounters(current, side === 'enemy');
       }
       if (current.data.hasTargetedAbility && (isFlipping || !current.data.hasActivate)) {
         await this.controller.handleTargetedAbility(current, side === 'enemy');
+      }
+      // Sloth Action: after Flip (place weakness), destroy a creature with Weakness Markers
+      if (current.data.name === "Sloth") {
+        await (this.controller.abilityManager as any).handleSlothDestroyAction(current, side === 'enemy');
       }
       if (current.data.hasGlobalAbility) {
         await this.controller.executeGlobalAbility(current);
@@ -390,7 +445,12 @@ export class PhaseManager {
     let pStymied = false;
     let eStymied = false;
 
-    if (pCard && seal.champion && seal.champion.data.isEnemy) {
+    // Fledgeling: Cannot battle or be battled — skip combat at this seal
+    if (pCard?.data.cannotBattleOrBeBattled || eCard?.data.cannotBattleOrBeBattled) {
+      this.controller.addLog(`${pCard?.data.cannotBattleOrBeBattled ? pCard?.data.name : eCard?.data.name} cannot battle or be battled.`);
+      pStymied = true;
+      eStymied = true;
+    } else if (pCard && seal.champion && seal.champion.data.isEnemy) {
       this.controller.addLog(`Player ${pCard.data.name} battles Enemy Champion ${seal.champion.data.name}`);
       pStymied = await this.controller.handleBattle(pCard, seal.champion, idx, true);
       pCard = this.controller.playerBattlefield[idx];
@@ -446,21 +506,38 @@ export class PhaseManager {
     const isDProtected = this.controller.abilityManager.isProtected(defender);
     let stymied = false;
 
+    const elderAttacker = attacker.data.name === "Elder";
+    const elderDefender = defender.data.name === "Elder";
+    const sendToDeckInstead = (loser: CardEntity) => {
+      this.controller.abilityManager.returnCreatureToOwnerDeck(loser);
+    };
+
+    const wrathDefenderCannotBeDestroyedByAttacker = defender.data.name === "Wrath" && attacker.data.weaknessMarkers > 0;
+    const wrathAttackerCannotBeDestroyedByDefender = attacker.data.name === "Wrath" && defender.data.weaknessMarkers > 0;
+
     if (aPow > dPow) {
-      if (!defender.data.isInvincible && !isDProtected) {
+      if (wrathDefenderCannotBeDestroyedByAttacker) {
+        this.controller.addLog(`${defender.data.name} cannot be destroyed by ${attacker.data.name} (attacker has Weakness Markers).`);
+        stymied = true;
+      } else if (!defender.data.isInvincible && !isDProtected) {
         this.controller.addLog(`${attacker.data.name} defeats ${defender.data.name}`);
         this.controller.abilityManager.handleFinalAct(defender, attacker);
-        this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
+        if (elderAttacker) sendToDeckInstead(defender);
+        else this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
         await this.controller.abilityManager.handlePostCombat(attacker);
       } else {
         this.controller.addLog(`${defender.data.name} is Protected or Invincible. ${attacker.data.name} is stymied.`);
         stymied = true;
       }
     } else if (dPow > aPow) {
-      if (!attacker.data.isInvincible && !isAProtected) {
+      if (wrathAttackerCannotBeDestroyedByDefender) {
+        this.controller.addLog(`${attacker.data.name} cannot be destroyed by ${defender.data.name} (attacker has Weakness Markers).`);
+        stymied = true;
+      } else if (!attacker.data.isInvincible && !isAProtected) {
         this.controller.addLog(`${defender.data.name} defeats ${attacker.data.name}`);
         this.controller.abilityManager.handleFinalAct(attacker, defender);
-        this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false);
+        if (elderDefender) sendToDeckInstead(attacker);
+        else this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false);
         await this.controller.abilityManager.handlePostCombat(defender);
       } else {
         this.controller.addLog(`${attacker.data.name} is Protected or Invincible. ${defender.data.name} is stymied.`);
@@ -468,15 +545,23 @@ export class PhaseManager {
       }
     } else {
       this.controller.addLog(`Mutual destruction: ${attacker.data.name} and ${defender.data.name}`);
-      if (!attacker.data.isInvincible && !isAProtected) {
+      if (wrathAttackerCannotBeDestroyedByDefender) {
+        this.controller.addLog(`${attacker.data.name} cannot be destroyed (${defender.data.name} has Weakness Markers).`);
+        stymied = true;
+      } else if (!attacker.data.isInvincible && !isAProtected) {
         this.controller.abilityManager.handleFinalAct(attacker, defender);
-        this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false);
+        if (elderDefender) sendToDeckInstead(attacker);
+        else this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false);
       } else if (attacker.data.isInvincible) {
         stymied = true;
       }
-      if (!defender.data.isInvincible && !isDProtected) {
+      if (wrathDefenderCannotBeDestroyedByAttacker) {
+        this.controller.addLog(`${defender.data.name} cannot be destroyed (${attacker.data.name} has Weakness Markers).`);
+        stymied = true;
+      } else if (!defender.data.isInvincible && !isDProtected) {
         this.controller.abilityManager.handleFinalAct(defender, attacker);
-        this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
+        if (elderAttacker) sendToDeckInstead(defender);
+        else this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
       } else if (defender.data.isInvincible) {
         stymied = true;
       }
@@ -605,6 +690,39 @@ export class PhaseManager {
         this.controller.addLog(`${champBuff.data.name} receives +3 Power Markers from Delta's sacrifice.`);
       }
     });
+
+    // Noble: End of Turn — +2 Power Marker on this creature
+    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
+      for (const card of [this.controller.playerBattlefield[i], this.controller.enemyBattlefield[i]]) {
+        if (card && card.data.name === "Noble") {
+          card.data.powerMarkers += 2;
+          card.updateVisualMarkers();
+          this.controller.addLog(`${card.data.name} gains +2 Power Markers at end of turn.`);
+        }
+      }
+    }
+    this.controller.seals.forEach((seal) => {
+      const champ = seal.champion;
+      if (champ && champ.data.name === "Noble") {
+        champ.data.powerMarkers += 2;
+        champ.updateVisualMarkers();
+        this.controller.addLog(`${champ.data.name} gains +2 Power Markers at end of turn.`);
+      }
+    });
+
+    // Fledgeling: Sacrifice at end of the turn
+    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
+      const pCard = this.controller.playerBattlefield[i];
+      if (pCard && pCard.data.sacrificeEndOfTurn) {
+        this.controller.addLog(`${pCard.data.name} is sacrificed at end of turn.`);
+        this.controller.destroyCard(pCard, false, i, false);
+      }
+      const eCard = this.controller.enemyBattlefield[i];
+      if (eCard && eCard.data.sacrificeEndOfTurn) {
+        this.controller.addLog(`${eCard.data.name} is sacrificed at end of turn.`);
+        this.controller.destroyCard(eCard, true, i, false);
+      }
+    }
   }
 
   public async handleSiege(idx: number, attacker: CardEntity | null, isPlayer: boolean) {
@@ -676,6 +794,7 @@ export class PhaseManager {
     
     this.controller.addLog(`${card.data.name} ascends to Seal ${idx + 1}`);
     this.controller.seals[idx].champion = card;
+    card.applyBackTextureIfNeeded(); // All cards share same back graphic
     gsap.to(card.mesh.position, {
       x: this.controller.seals[idx].mesh.position.x,
       y: 0.6,

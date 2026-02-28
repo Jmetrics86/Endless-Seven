@@ -8,6 +8,7 @@ export class AbilityManager {
 
   public isImmuneToAbilities(target: CardEntity, source: CardEntity): boolean {
     if (source.data.type !== 'Creature') return false;
+    if (target.data.abilityImmune) return true;
     if (target.data.faction !== 'Celestial') return false;
     
     const seraphimOnSeal = this.controller.seals.find(s => 
@@ -72,6 +73,17 @@ export class AbilityManager {
       for (const s of this.controller.seals.filter(s => !s.champion && s.alignment === Alignment.LIGHT)) {
         await this.controller.claimSeal(s.index, Alignment.DARK);
       }
+    } else if (effect === 'siphon_power_only') {
+      const allCards = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && c !== source) as CardEntity[];
+      let totalP = 0;
+      allCards.forEach(c => {
+        totalP += c.data.powerMarkers;
+        c.data.powerMarkers = 0;
+        c.updateVisualMarkers();
+      });
+      source.data.powerMarkers += totalP;
+      source.updateVisualMarkers();
+      this.controller.addLog(`${source.data.name} transfers all Power Markers in play to itself.`);
     }
     await new Promise(r => setTimeout(r, 600));
   }
@@ -162,14 +174,62 @@ export class AbilityManager {
       else if (idxP !== -1) this.controller.playerBattlefield[idxP] = null;
       else if (idxE !== -1) this.controller.enemyBattlefield[idxE] = null;
 
-      this.controller.addLog(`${source.data.name} spins ${target.data.name} back to deck`);
+      this.controller.addLog(`${source.data.name} places ${target.data.name} on top of its owner's deck`);
       const deck = target.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
       const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = target.data;
       deck.push({ ...baseData });
       gsap.to(target.mesh.position, { y: 10, duration: 0.5, onComplete: () => {
         this.controller.disposeCard(target);
       }});
+    } else if (effect === 'place_power') {
+      const amount = pendingAbilityData.markerPower ?? source.data.markerPower ?? 3;
+      target.data.powerMarkers += amount;
+      target.updateVisualMarkers();
+      this.controller.addLog(`${source.data.name} places +${amount} Power Marker(s) on ${target.data.name}`);
+    } else if (effect === 'place_weakness') {
+      const amount = pendingAbilityData.markerWeakness ?? source.data.markerWeakness ?? 3;
+      target.data.weaknessMarkers += amount;
+      target.updateVisualMarkers();
+      this.controller.addLog(`${source.data.name} places -${amount} Weakness Marker(s) on ${target.data.name}`);
+    } else if (effect === 'destroy_creature_with_weakness') {
+      const idxP = this.controller.playerBattlefield.indexOf(target);
+      const idxE = this.controller.enemyBattlefield.indexOf(target);
+      const seal = this.controller.seals.find(s => s.champion === target);
+      if (seal) {
+        this.controller.destroyCard(target, target.data.isEnemy, seal.index, true);
+        seal.champion = null;
+      } else if (idxP !== -1) this.controller.destroyCard(target, false, idxP, false);
+      else if (idxE !== -1) this.controller.destroyCard(target, true, idxE, false);
+      this.controller.addLog(`${source.data.name} destroys ${target.data.name}.`);
     }
+  }
+
+  /** Return a creature to top of its owner's deck (e.g. Elder's effect). */
+  public returnCreatureToOwnerDeck(target: CardEntity) {
+    const idxP = this.controller.playerBattlefield.indexOf(target);
+    const idxE = this.controller.enemyBattlefield.indexOf(target);
+    const seal = this.controller.seals.find(s => s.champion === target);
+    if (seal) seal.champion = null;
+    else if (idxP !== -1) this.controller.playerBattlefield[idxP] = null;
+    else if (idxE !== -1) this.controller.enemyBattlefield[idxE] = null;
+    const deck = target.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
+    const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = target.data;
+    deck.push({ ...baseData });
+    this.controller.addLog(`${target.data.name} is placed on top of its owner's deck.`);
+    gsap.to(target.mesh.position, { y: 10, duration: 0.5, onComplete: () => {
+      this.controller.disposeCard(target);
+    }});
+  }
+
+  /** Count Vampyres in play for Lord's Activate. With Duke in play, that side's creatures count as Vampyre. */
+  public countVampyresInPlay(isEnemy: boolean): number {
+    const playerHasDuke = this.controller.playerBattlefield.some(c => c?.data.name === 'Duke') || this.controller.seals.some(s => s.champion?.data.name === 'Duke' && !s.champion?.data.isEnemy);
+    const enemyHasDuke = this.controller.enemyBattlefield.some(c => c?.data.name === 'Duke') || this.controller.seals.some(s => s.champion?.data.name === 'Duke' && s.champion?.data.isEnemy);
+    const considerVampyre = (c: CardEntity) =>
+      c.data.faction === 'Vampyre' ||
+      (c.data.isEnemy === isEnemy && (isEnemy ? enemyHasDuke : playerHasDuke));
+    const all = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+    return all.filter(considerVampyre).length;
   }
 
   public async allocateCounters(card: CardEntity, isAI: boolean) {
@@ -218,6 +278,28 @@ export class AbilityManager {
 
   public async handleTargetedAbility(source: CardEntity, isAI: boolean) {
     const data = source.data;
+    if (data.targetType === 'champion') {
+      const targets = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+        .filter(c => c !== null && (c as CardEntity).data.isChampion) as CardEntity[];
+      if (isAI) {
+        if (targets.length > 0) {
+          const target = targets[Math.floor(Math.random() * targets.length)];
+          this.applyAbilityEffect(target, { source, effect: data.effect });
+        } else {
+          this.controller.addLog(`${source.data.name} finds no Champion in play to place on deck.`);
+        }
+        return Promise.resolve();
+      }
+      this.controller.updateState({
+        currentPhase: Phase.ABILITY_TARGETING,
+        instructionText: "Lord: Choose a Champion to place on top of its owner's deck."
+      });
+      this.controller.zoomOut();
+      return new Promise<void>((resolve) => {
+        (this.controller as any).resolutionCallback = resolve;
+        (this.controller as any).pendingAbilityData = { source, effect: data.effect, targetType: data.targetType };
+      });
+    }
     if (data.targetType === 'limbo_creature') {
       const targets = [...this.controller.playerLimbo, ...this.controller.enemyLimbo];
       if (isAI) {
@@ -240,27 +322,89 @@ export class AbilityManager {
         (this.controller as any).pendingAbilityData = { source, effect: data.effect, targetType: data.targetType };
       });
     }
-    if (isAI) {
-      const targets = (data.targetType === 'creature'
-        ? this.controller.playerBattlefield
-        : [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
-      ).filter(c => c !== null) as CardEntity[];
 
-      if (targets.length > 0) {
-        this.applyAbilityEffect(targets[0], { source, effect: data.effect });
+    // Envy: targetType creature_power_gte — valid targets = creatures with effective power >= source's
+    if (data.targetType === 'creature_power_gte') {
+      const sourcePower = source.data.power + source.data.powerMarkers - source.data.weaknessMarkers;
+      const allCreatures = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && c !== source) as CardEntity[];
+      const validTargets = allCreatures.filter(c => {
+        const p = c.data.power + c.data.powerMarkers - c.data.weaknessMarkers;
+        return p >= sourcePower && !this.isImmuneToAbilities(c, source);
+      });
+      if (isAI) {
+        if (validTargets.length > 0) {
+          const target = validTargets[Math.floor(Math.random() * validTargets.length)];
+          this.applyAbilityEffect(target, { source, effect: data.effect, markerWeakness: data.markerWeakness ?? 3 });
+        } else {
+          this.controller.addLog(`${source.data.name} finds no creature with Power Value ≥ its own to affect.`);
+        }
+        return Promise.resolve();
       }
-      return Promise.resolve();
-    } else {
       this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
-        instructionText: `Select a target to ${data.effect?.toUpperCase()}.`
+        instructionText: "Envy: Choose a creature with Power Value ≥ Envy's to place -3 Weakness on."
       });
       this.controller.zoomOut();
       return new Promise<void>((resolve) => {
         (this.controller as any).resolutionCallback = resolve;
-        (this.controller as any).pendingAbilityData = { source, effect: data.effect, targetType: data.targetType };
+        (this.controller as any).pendingAbilityData = { source, effect: data.effect, targetType: data.targetType, validTargets, markerWeakness: data.markerWeakness ?? 3 };
       });
     }
+
+    if (isAI) {
+      let targets: CardEntity[];
+      if (data.targetType === 'creature') {
+        const all = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+        targets = all.filter(c => !this.isImmuneToAbilities(c, source));
+      } else {
+        targets = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+      }
+      if (targets.length > 0) {
+        this.applyAbilityEffect(targets[0], { source, effect: data.effect, markerWeakness: source.data.markerWeakness });
+      } else if (data.effect === 'place_weakness') {
+        this.controller.addLog(`${source.data.name} finds no valid creature to place Weakness on.`);
+      }
+      return Promise.resolve();
+    }
+
+    const instructionText = data.effect === 'place_power'
+      ? `${source.data.name}: Choose a creature to place +${source.data.markerPower ?? 3} Power Marker(s) on.`
+      : data.effect === 'place_weakness'
+      ? (data.targetType === 'creature_power_gte' ? "Envy: Choose a creature with Power Value ≥ Envy's to place -3 Weakness on." : `${source.data.name}: Choose a creature to place -${source.data.markerWeakness ?? 3} Weakness on.`)
+      : `Select a target to ${data.effect?.toUpperCase()}.`;
+    this.controller.updateState({
+      currentPhase: Phase.ABILITY_TARGETING,
+      instructionText
+    });
+    this.controller.zoomOut();
+    return new Promise<void>((resolve) => {
+      (this.controller as any).resolutionCallback = resolve;
+      (this.controller as any).pendingAbilityData = { source, effect: data.effect, targetType: data.targetType, markerWeakness: source.data.markerWeakness };
+    });
+  }
+
+  /** Sloth Action: destroy any creature in play with Weakness Markers. */
+  public async handleSlothDestroyAction(source: CardEntity, isAI: boolean) {
+    const validTargets = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+      .filter(c => c !== null && (c as CardEntity).data.weaknessMarkers > 0) as CardEntity[];
+    if (validTargets.length === 0) {
+      this.controller.addLog(`${source.data.name} finds no creature with Weakness Markers to destroy.`);
+      return;
+    }
+    if (isAI) {
+      const target = validTargets[Math.floor(Math.random() * validTargets.length)];
+      this.applyAbilityEffect(target, { source, effect: 'destroy_creature_with_weakness' });
+      return;
+    }
+    this.controller.updateState({
+      currentPhase: Phase.ABILITY_TARGETING,
+      instructionText: "Sloth: Choose a creature with Weakness Markers to destroy."
+    });
+    this.controller.zoomOut();
+    await new Promise<void>((resolve) => {
+      (this.controller as any).resolutionCallback = resolve;
+      (this.controller as any).pendingAbilityData = { source, effect: 'destroy_creature_with_weakness', validTargets };
+    });
   }
 
   public async handleLimboAbility(card: CardEntity) {
@@ -379,6 +523,21 @@ export class AbilityManager {
   }
 
   public async handleActivateAbility(source: CardEntity, isAI: boolean) {
+    // Greed: Activate = Transfer all Power Markers in play to this creature
+    if (source.data.name === "Greed") {
+      const allCards = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && c !== source) as CardEntity[];
+      let totalP = 0;
+      allCards.forEach(c => {
+        totalP += c.data.powerMarkers;
+        c.data.powerMarkers = 0;
+        c.updateVisualMarkers();
+      });
+      source.data.powerMarkers += totalP;
+      source.updateVisualMarkers();
+      this.controller.addLog(`${source.data.name} transfers all Power Markers in play to itself.`);
+      return;
+    }
+
     if (source.data.name === "Nephilim") {
       if (isAI) {
         const targetIdx = Math.floor(Math.random() * 7);
@@ -491,29 +650,46 @@ export class AbilityManager {
       this.controller.addLog(`The Spinner activates (${count} Acolytes, Champion on Seal: ${hasChampionOnSeal}).`);
       return;
     }
+
+    // Lord: Activate = +1 Power Marker on Lord for each Vampyre in play (Duke passive: your creatures count as Vampyre)
+    if (source.data.name === "Lord") {
+      const isEnemy = source.data.isEnemy;
+      const count = this.countVampyresInPlay(isEnemy);
+      source.data.powerMarkers += count;
+      source.updateVisualMarkers();
+      this.controller.addLog(`${source.data.name} gains ${count} Power Markers (one per Vampyre in play).`);
+      return;
+    }
   }
 
   public async handleSealTargetAbility(source: CardEntity, isAI: boolean) {
-    const effect = source.data.sealEffect as Alignment;
-    // The Almighty: Purify any Corrupted Seal without a Champion (Dark only)
+    // Regent: no fixed sealEffect — controller chooses their alignment for the seal
+    const pAlign = this.controller.state.playerAlignment;
+    const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
+    let effect = source.data.sealEffect as Alignment | undefined;
+    if (source.data.name === "Regent") {
+      effect = source.data.isEnemy ? eAlign : pAlign;
+    }
     const corruptOnly = source.data.name === "The Almighty";
     if (isAI) {
       const targetAlign = effect === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
       let validSeals = this.controller.seals.filter(s => !s.champion && (s.alignment === targetAlign || s.alignment === Alignment.NEUTRAL));
       if (corruptOnly && effect === Alignment.LIGHT) validSeals = validSeals.filter(s => s.alignment === Alignment.DARK);
-      if (validSeals.length > 0) await this.controller.claimSeal(validSeals[0].index, effect);
+      if (validSeals.length > 0 && effect) await this.controller.claimSeal(validSeals[0].index, effect);
       return Promise.resolve();
     } else {
       this.controller.updateState({
         currentPhase: Phase.SEAL_TARGETING,
-        instructionText: corruptOnly && effect === Alignment.LIGHT
+        instructionText: source.data.name === "Regent"
+          ? `Regent: Select a Seal without a Champion to change to ${effect === Alignment.LIGHT ? 'Light' : 'Dark'}.`
+          : corruptOnly && effect === Alignment.LIGHT
           ? "The Almighty: Select a Corrupted (Dark) Seal without a Champion to Purify."
           : `Select an undefended seal to ${effect === Alignment.LIGHT ? 'PURIFY' : 'CORRUPT'}.`
       });
       this.controller.zoomOut();
       return new Promise<void>((resolve) => {
         (this.controller as any).resolutionCallback = resolve;
-        (this.controller as any).pendingAbilityData = { source, effect, corruptOnly: corruptOnly && effect === Alignment.LIGHT };
+        (this.controller as any).pendingAbilityData = { source, effect: effect ?? pAlign, corruptOnly: corruptOnly && effect === Alignment.LIGHT };
       });
     }
   }

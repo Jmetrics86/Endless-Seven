@@ -22,9 +22,13 @@ function ensureBackTextureLoaded(mat: THREE.MeshBasicMaterial): void {
   pendingBackMaterials.push(mat);
   if (pendingBackMaterials.length === 1) {
     const loader = new THREE.TextureLoader();
-    loader.load('/' + CARD_BACK_PATH, (tex) => {
+    const url = cardArtUrl(CARD_BACK_PATH);
+    loader.load(url, (tex) => {
       sharedBackTexture = tex;
-      pendingBackMaterials.forEach(m => { m.map = tex; });
+      const toApply = pendingBackMaterials.slice();
+      pendingBackMaterials.length = 0;
+      toApply.forEach(m => { m.map = tex; });
+    }, undefined, () => {
       pendingBackMaterials.length = 0;
     });
   }
@@ -284,6 +288,16 @@ export class CardEntity implements GameEntity {
       material.emissiveIntensity = 0.8 + Math.sin(time * 4) * 0.4;
     } else {
       material.emissiveIntensity = 0.3 + Math.sin(time * 2) * 0.1;
+    }
+    // Ensure back texture is applied if it loaded after this card was created (fixes missed cards e.g. Sloth)
+    this.applyBackTextureIfNeeded();
+  }
+
+  /** Call when a card is placed (e.g. on battlefield) so the back texture is applied immediately instead of waiting for the next update tick. */
+  public applyBackTextureIfNeeded(): void {
+    const backMat = this.backPlane.material as THREE.MeshBasicMaterial;
+    if (!backMat.map && sharedBackTexture) {
+      backMat.map = sharedBackTexture;
     }
   }
 
