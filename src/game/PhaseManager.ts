@@ -100,6 +100,7 @@ export class PhaseManager {
   }
 
   public async startResolution() {
+    this.controller.cardsThatBattledThisRound = [];
     this.controller.updateState({ currentPhase: Phase.RESOLUTION });
     this.controller.addLog("--- Resolution Phase Started ---");
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
@@ -232,6 +233,10 @@ export class PhaseManager {
       if (isActivate && current.data.name === "Nephilim") {
         await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
       }
+      // The Almighty, The Allotter, Saint Michael, The Spinner: Activate
+      if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner")) {
+        await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
+      }
 
       // Faction Presence (The Spinner: Light in play; Lord: Vampyre in play; Omega: Lycan in play and in Limbo)
       if (current.data.name === "The Spinner" || current.data.name === "Lord") {
@@ -359,13 +364,13 @@ export class PhaseManager {
       if (current.data.needsAllocation) {
         await this.controller.allocateCounters(current, side === 'enemy');
       }
-      if (current.data.hasTargetedAbility) {
+      if (current.data.hasTargetedAbility && (isFlipping || !current.data.hasActivate)) {
         await this.controller.handleTargetedAbility(current, side === 'enemy');
       }
       if (current.data.hasGlobalAbility) {
         await this.controller.executeGlobalAbility(current);
       }
-      if (current.data.hasSealTargetAbility) {
+      if (current.data.hasSealTargetAbility && isFlipping) {
         await this.controller.handleSealTargetAbility(current, side === 'enemy');
       }
       
@@ -428,6 +433,8 @@ export class PhaseManager {
   }
 
   public async handleBattle(attacker: CardEntity, defender: CardEntity, idx: number, isAgainstChamp: boolean): Promise<boolean> {
+    this.controller.cardsThatBattledThisRound.push(attacker);
+    this.controller.cardsThatBattledThisRound.push(defender);
     const aPow = attacker.data.power + attacker.data.powerMarkers - attacker.data.weaknessMarkers;
     const dPow = defender.data.power + defender.data.powerMarkers - defender.data.weaknessMarkers;
 
@@ -440,7 +447,7 @@ export class PhaseManager {
         this.controller.addLog(`${attacker.data.name} defeats ${defender.data.name}`);
         this.controller.abilityManager.handleFinalAct(defender, attacker);
         this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
-        this.controller.abilityManager.handlePostCombat(attacker);
+        await this.controller.abilityManager.handlePostCombat(attacker);
       } else {
         this.controller.addLog(`${defender.data.name} is Protected or Invincible. ${attacker.data.name} is stymied.`);
         stymied = true;
@@ -450,7 +457,7 @@ export class PhaseManager {
         this.controller.addLog(`${defender.data.name} defeats ${attacker.data.name}`);
         this.controller.abilityManager.handleFinalAct(attacker, defender);
         this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false);
-        this.controller.abilityManager.handlePostCombat(defender);
+        await this.controller.abilityManager.handlePostCombat(defender);
       } else {
         this.controller.addLog(`${attacker.data.name} is Protected or Invincible. ${defender.data.name} is stymied.`);
         stymied = true;
@@ -535,14 +542,15 @@ export class PhaseManager {
       if (pCard && pCard.data.name === "Delta" && pCard.data.pendingDeltaSacrifice) {
         this.controller.updateState({
           decisionContext: 'DELTA_SACRIFICE',
-          instructionText: `Use Delta to sacrifice itself and grant +3 Power Markers to an ally?`
+          instructionText: "Use Delta to sacrifice itself and grant +3 Power Markers to an ally?",
+          decisionMessage: "Delta will be sacrificed. You will then choose one creature to receive +3 Power Markers. Use this ability?"
         });
 
         const confirmed = await new Promise<boolean>((resolve) => {
           (this.controller as any).nullifyCallback = resolve;
         });
 
-        this.controller.updateState({ decisionContext: undefined });
+        this.controller.updateState({ decisionContext: undefined, decisionMessage: undefined });
 
         if (confirmed) {
           this.controller.addLog(`${pCard.data.name} sacrifices itself to empower an ally.`);

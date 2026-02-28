@@ -57,6 +57,8 @@ export interface GameState {
   weaknessPool: number;
   abilitySourceCardName?: string;
   lockedSealIndex?: number;
-  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY';
+  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY' | 'ALMIGHTY_MARKER_TYPE';
+  /** Stable message for the current decision dialog (not overwritten by hover). */
+  decisionMessage?: string;
   logs: string[];
 }

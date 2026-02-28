@@ -47,6 +47,13 @@ export default function App() {
     }
   };
 
+  const handleMarkerTypeChoice = (type: 'power' | 'weakness') => {
+    if (gameRef.current) {
+      (gameRef.current as any).markerTypeCallback?.(type);
+      (gameRef.current as any).markerTypeCallback = null;
+    }
+  };
+
   const handleForceSkip = () => {
     gameRef.current?.forceSkip();
   };
@@ -189,6 +196,11 @@ export default function App() {
             <div className="text-sm text-gray-300 italic text-center max-w-2xl mb-4">
               {gameState.instructionText}
             </div>
+            {gameState.currentPhase === Phase.PREP && (
+              <div className="text-[0.65rem] text-gray-500 uppercase tracking-wider text-center">
+                Click a card in your Limbo to use its ability (e.g. Martyr, Saint Michael).
+              </div>
+            )}
           </div>
 
           {/* Side Log */}
@@ -240,27 +252,58 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Decision Dialog (Fallen One, Delta, etc.) */}
+      {/* Decision Dialog (Fallen One, Delta, Luna, The Almighty marker type) */}
       <AnimatePresence>
-        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && (
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext === 'ALMIGHTY_MARKER_TYPE' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
           >
-            <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">
-              {gameState.decisionContext === 'FALLEN_ONE' ? 'Limbo Reaction' : gameState.decisionContext === 'LUNA_NULLIFY' ? 'Final Act' : 'End of Round Ability'}
-            </div>
+            <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">The Almighty — Activate</div>
             <div className="text-xs text-gray-200 text-center max-w-xs">
-              {gameState.instructionText}
+              {gameState.decisionMessage ?? gameState.instructionText}
+            </div>
+            <div className="flex gap-4 mt-1">
+              <button
+                onClick={() => handleMarkerTypeChoice('power')}
+                className="px-5 py-2 bg-[#00f2ff]/20 border border-[#00f2ff] text-[#00f2ff] hover:bg-[#00f2ff]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                All Power Markers
+              </button>
+              <button
+                onClick={() => handleMarkerTypeChoice('weakness')}
+                className="px-5 py-2 bg-[#ff0044]/20 border border-[#ff0044] text-[#ff4466] hover:bg-[#ff0044]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                All Weakness Markers
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && gameState.decisionContext !== 'ALMIGHTY_MARKER_TYPE' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3 min-w-[280px]"
+          >
+            <div className="text-[0.7rem] text-[#00f2ff] uppercase tracking-widest font-semibold border-b border-white/20 pb-2 w-full text-center">
+              {gameState.decisionContext === 'FALLEN_ONE' && 'Fallen One (Limbo) — Nullify?'}
+              {gameState.decisionContext === 'LUNA_NULLIFY' && 'Luna (Limbo) — Nullify influence change?'}
+              {gameState.decisionContext === 'DELTA_SACRIFICE' && 'Delta — Sacrifice for +3?'}
+            </div>
+            <div className="text-xs text-gray-200 text-center max-w-sm leading-relaxed">
+              {gameState.decisionMessage ?? gameState.instructionText}
             </div>
             <div className="flex gap-4 mt-1">
               <button
                 onClick={() => handleDecision(true)}
                 className="px-6 py-1.5 bg-[#00f2ff]/20 border border-[#00f2ff] text-[#00f2ff] hover:bg-[#00f2ff]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
               >
-                {(gameState.decisionContext === 'FALLEN_ONE' || gameState.decisionContext === 'LUNA_NULLIFY') ? 'Nullify' : 'Activate'}
+                {(gameState.decisionContext === 'FALLEN_ONE' || gameState.decisionContext === 'LUNA_NULLIFY') ? 'Yes, nullify' : 'Yes, activate'}
               </button>
               <button
                 onClick={() => handleDecision(false)}

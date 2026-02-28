@@ -31,6 +31,8 @@ export class GameController implements IGameController {
   public enemyDeck: CardData[] = [];
   public playerLimbo: CardEntity[] = [];
   public enemyLimbo: CardEntity[] = [];
+  /** Cards that participated in battle this round (for Saint Michael Final Act). */
+  public cardsThatBattledThisRound: CardEntity[] = [];
   public playerGraveyard: CardEntity[] = [];
   public enemyGraveyard: CardEntity[] = [];
 
@@ -395,9 +397,13 @@ export class GameController implements IGameController {
           return;
         }
       } else {
-        this.updateState({ decisionContext: 'LUNA_NULLIFY', instructionText: 'Use Luna from Limbo to nullify this influence change? (Luna moves to Graveyard)' });
+        this.updateState({
+          decisionContext: 'LUNA_NULLIFY',
+          instructionText: 'Use Luna from Limbo to nullify this influence change? (Luna moves to Graveyard)',
+          decisionMessage: 'Your opponent is changing a Seal\'s influence. Use Luna from your Limbo to nullify this? (Luna is moved to your Graveyard.)'
+        });
         const useLuna = await new Promise<boolean>(resolve => { (this as any).nullifyCallback = resolve; });
-        this.updateState({ decisionContext: undefined });
+        this.updateState({ decisionContext: undefined, decisionMessage: undefined });
         if (useLuna) {
           this.abilityManager.moveToGraveyard(lunaCard);
           this.addLog(`Luna is moved to the Graveyard to nullify the influence change.`);
@@ -433,9 +439,20 @@ export class GameController implements IGameController {
   }
 
   private handleMouseMove(event: MouseEvent) {
+    // Don't overwrite instruction text when a decision dialog or targeting prompt is active
+    const promptActive = !!this.state.decisionContext ||
+      this.state.currentPhase === Phase.ABILITY_TARGETING ||
+      this.state.currentPhase === Phase.SEAL_TARGETING ||
+      this.state.currentPhase === Phase.COUNTER_ALLOCATION ||
+      this.state.currentPhase === Phase.DELTA_BUFF_TARGETING;
+    if (promptActive) {
+      this.selectedObject = null;
+      return;
+    }
+
     const allCards = [...this.playerHand, ...this.playerBattlefield, ...this.enemyBattlefield, ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[];
     const intersects = this.inputHandler.raycaster.intersectObjects(allCards.map(c => c.mesh), true);
-    
+
     if (intersects.length > 0) {
       let obj = intersects[0].object;
       while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
@@ -532,9 +549,12 @@ export class GameController implements IGameController {
       }
     } else if (this.state.currentPhase === Phase.ABILITY_TARGETING) {
       const forSentinel = this.pendingAbilityData?.effect === 'sentinel_absorb';
-      const allBoard = forSentinel
-        ? ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion), ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[])
-        : ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[]);
+      const forSaintMichael = this.pendingAbilityData?.effect === 'saint_michael_destroy';
+      const allBoard = forSaintMichael && this.pendingAbilityData?.validTargets?.length
+        ? (this.pendingAbilityData.validTargets as CardEntity[])
+        : forSentinel
+          ? ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion), ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[])
+          : ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[]);
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
         let obj = intersects[0].object;
@@ -567,6 +587,10 @@ export class GameController implements IGameController {
             return;
           }
           if (!seal.champion) {
+            if (this.pendingAbilityData.corruptOnly && seal.alignment !== Alignment.DARK) {
+              this.addLog("The Almighty can only Purify a Corrupted (Dark) Seal.");
+              return;
+            }
             await this.claimSeal(seal.index, this.pendingAbilityData.effect);
             const phaseAfterClaim = this.state.currentPhase as Phase;
             if (phaseAfterClaim !== Phase.GAME_OVER) {

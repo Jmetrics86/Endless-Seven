@@ -6,13 +6,13 @@
 import { CardData } from './types';
 
 export const LIGHT_POOL: CardData[] = [
-  { name: "The Spinner", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Flip: Gain +1 Power Marker for every Light card currently in play.", markerPower: 0, needsAllocation: true },
-  { name: "The Allotter", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Flip: Destroy card on any Seal.", hasTargetedAbility: true, effect: 'destroy', targetType: 'any' },
-  { name: "Prophet", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Passive: Prevents Purified Seals from being Corrupted while in play." },
-  { name: "The Inevitable", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Post-Combat: After destroying a creature, gain 2 Power Markers." },
-  { name: "Saint Michael", faction: "Light", type: "Avatar", power: 10, isChampion: true, ability: "Win Con: Activate with 7 Seals. Final Act: Target battled card loses 3 Power." },
-  { name: "Martyr", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Limbo Trigger: Purify one Neutral Seal without a Champion.", hasLimboAbility: true },
-  { name: "The Almighty", faction: "Light", type: "God", power: 15, isChampion: true, ability: "Flip: Purify a Corrupted Seal without a Champion.", hasSealTargetAbility: true, sealEffect: 'LIGHT' },
+  { name: "The Spinner", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Champion. Flip: +1 Power per Acolyte in play. Activate: Win if 4 Acolytes in play and at least one Champion on a Seal.", markerPower: 0, needsAllocation: true, hasActivate: true },
+  { name: "The Allotter", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Champion. Flip: Destroy any card on any Seal. Activate: Destroy one Marker of any type.", hasTargetedAbility: true, effect: 'destroy', targetType: 'any', hasActivate: true },
+  { name: "Prophet", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Champion. While in play, Purified Seals cannot be Corrupted." },
+  { name: "The Inevitable", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Champion. After destroying a creature in battle, you may destroy another card or Marker in play." },
+  { name: "Saint Michael", faction: "Light", type: "Avatar", power: 10, isChampion: true, ability: "Champion. Activate: If you control 5+ Seals with Champions, you win. Final Act: In Limbo, move to Graveyard to destroy a card that battled this turn.", hasActivate: true, hasLimboAbility: true },
+  { name: "Martyr", faction: "Light", type: "Avatar", power: 9, isChampion: true, ability: "Champion. When placed in Limbo, Purify any one Neutral Seal without a Champion.", hasLimboAbility: true },
+  { name: "The Almighty", faction: "Light", type: "God", power: 15, isChampion: true, ability: "Champion. Flip: Purify any Corrupted Seal without a Champion. Activate: Destroy all instances of one marker type (all Power, all Weakness, etc.).", hasSealTargetAbility: true, sealEffect: 'LIGHT', hasActivate: true },
   { name: "Archangel", faction: "Celestial", type: "Creature", power: 2, isChampion: false, ability: "Flip: Reveal enemy card and Nullify its Flip ability.", hasNullify: true },
   { name: "Cherubim", faction: "Celestial", type: "Creature", power: 4, isChampion: false, ability: "Flip: Return target creature in play to owner's deck.", hasTargetedAbility: true, effect: 'return', targetType: 'creature' },
   { name: "Fallen One", faction: "Celestial", type: "Creature", power: 6, isChampion: false, ability: "Haste: Resolve battle before Flip.", hasHaste: true, hasLimboAbility: true },
