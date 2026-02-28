@@ -88,6 +88,22 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Delta +3 target overlay (after sacrifice; camera is zoomed out) */}
+      <AnimatePresence>
+        {gameState?.currentPhase === Phase.DELTA_BUFF_TARGETING && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute top-24 left-1/2 -translate-x-1/2 z-50 glass-panel px-6 py-4 rounded-lg border border-[#00f2ff]/40 bg-black/80 pointer-events-none text-center"
+          >
+            <div className="text-[0.65rem] tracking-[0.2em] uppercase text-gray-400 mb-1">Delta&apos;s sacrifice</div>
+            <div className="text-sm text-[#00f2ff] font-semibold">+3 Power — click a creature</div>
+            <div className="text-[0.65rem] text-gray-500 mt-1">{gameState.instructionText}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Selection Overlay */}
       <AnimatePresence>
         {showSelection && (
@@ -234,7 +250,7 @@ export default function App() {
             className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
           >
             <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">
-              {gameState.decisionContext === 'FALLEN_ONE' ? 'Limbo Reaction' : 'End of Round Ability'}
+              {gameState.decisionContext === 'FALLEN_ONE' ? 'Limbo Reaction' : gameState.decisionContext === 'LUNA_NULLIFY' ? 'Final Act' : 'End of Round Ability'}
             </div>
             <div className="text-xs text-gray-200 text-center max-w-xs">
               {gameState.instructionText}
@@ -244,7 +260,7 @@ export default function App() {
                 onClick={() => handleDecision(true)}
                 className="px-6 py-1.5 bg-[#00f2ff]/20 border border-[#00f2ff] text-[#00f2ff] hover:bg-[#00f2ff]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
               >
-                {gameState.decisionContext === 'FALLEN_ONE' ? 'Nullify' : 'Activate'}
+                {(gameState.decisionContext === 'FALLEN_ONE' || gameState.decisionContext === 'LUNA_NULLIFY') ? 'Nullify' : 'Activate'}
               </button>
               <button
                 onClick={() => handleDecision(false)}

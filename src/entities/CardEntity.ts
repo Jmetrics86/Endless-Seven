@@ -30,11 +30,14 @@ export class CardEntity implements GameEntity {
   private tTex: THREE.CanvasTexture;
   private nCanvas: HTMLCanvasElement;
   private nTex: THREE.CanvasTexture;
+  private xCanvas: HTMLCanvasElement;
+  private xTex: THREE.CanvasTexture;
 
   private pMesh: THREE.Mesh;
   private wMesh: THREE.Mesh;
   private tMesh: THREE.Mesh;
   private nMesh: THREE.Mesh;
+  private xMesh: THREE.Mesh;
 
   constructor(data: CardData, isEnemy: boolean, playerAlignment: Alignment) {
     this.data = {
@@ -132,6 +135,16 @@ export class CardEntity implements GameEntity {
     this.nMesh.position.set(0, 0.1, -1.2); // Top middle
     this.mesh.add(this.nMesh);
 
+    // Wild Wolf death marker (black X)
+    this.xCanvas = document.createElement('canvas');
+    this.xCanvas.width = 128;
+    this.xCanvas.height = 128;
+    this.xTex = new THREE.CanvasTexture(this.xCanvas);
+    this.xMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({ map: this.xTex, transparent: true }));
+    this.xMesh.rotation.x = -Math.PI / 2;
+    this.xMesh.position.set(0, 0.12, 0);
+    this.mesh.add(this.xMesh);
+
     this.updateVisualMarkers();
   }
 
@@ -190,6 +203,25 @@ export class CardEntity implements GameEntity {
       this.nMesh.visible = false;
     }
     this.nTex.needsUpdate = true;
+
+    // Wild Wolf death marker: black X (destroyed at end of round)
+    const xCtx = this.xCanvas.getContext('2d')!;
+    xCtx.clearRect(0, 0, 128, 128);
+    if (this.data.markedByWildWolf) {
+      xCtx.strokeStyle = '#000000';
+      xCtx.lineWidth = 16;
+      xCtx.lineCap = 'round';
+      xCtx.beginPath();
+      xCtx.moveTo(12, 12);
+      xCtx.lineTo(116, 116);
+      xCtx.moveTo(116, 12);
+      xCtx.lineTo(12, 116);
+      xCtx.stroke();
+      this.xMesh.visible = true;
+    } else {
+      this.xMesh.visible = false;
+    }
+    this.xTex.needsUpdate = true;
   }
 
   public update(time: number) {
@@ -207,6 +239,7 @@ export class CardEntity implements GameEntity {
     this.wTex.dispose();
     this.tTex.dispose();
     this.nTex.dispose();
+    this.xTex.dispose();
     this.mesh.clear();
   }
 }

@@ -233,13 +233,23 @@ export class PhaseManager {
         await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
       }
 
-      // Faction Presence
-      if (current.data.name === "The Spinner" || current.data.name === "Omega" || current.data.name === "Lord") {
+      // Faction Presence (The Spinner: Light in play; Lord: Vampyre in play; Omega: Lycan in play and in Limbo)
+      if (current.data.name === "The Spinner" || current.data.name === "Lord") {
         const count = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
           .filter(c => c !== null && c.data.faction === current!.data.faction).length;
         current.data.powerMarkers += count;
         current.updateVisualMarkers();
         this.controller.addLog(`${current.data.name} gains ${count} Power Markers from faction presence`);
+      }
+      if (current.data.name === "Omega") {
+        const inPlay = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+          .filter(c => c !== null && c.data.faction === "Lycan").length;
+        const inLimbo = [...this.controller.playerLimbo, ...this.controller.enemyLimbo]
+          .filter(c => c.data.faction === "Lycan").length;
+        const count = inPlay + inLimbo;
+        current.data.powerMarkers += count;
+        current.updateVisualMarkers();
+        this.controller.addLog(`${current.data.name} gains ${count} Power Markers (+1 per Lycan in play and in Limbo)`);
       }
 
       // Herald
@@ -267,7 +277,7 @@ export class PhaseManager {
           if (validSeals.length > 0) {
             const preferred = validSeals.find(s => s.alignment !== targetAlign) || validSeals[0];
             this.controller.addLog(`${current.data.name} changes the influence of Seal ${preferred.index + 1}`);
-            this.controller.claimSeal(preferred.index, targetAlign);
+            await this.controller.claimSeal(preferred.index, targetAlign);
           } else {
             this.controller.addLog(`${current.data.name} finds no valid Seals to affect`);
           }
@@ -286,7 +296,7 @@ export class PhaseManager {
               const seal = this.controller.seals[targetIdx];
               if (!seal.champion) {
                 this.controller.addLog(`${current.data.name} changes the influence of Seal ${targetIdx + 1}`);
-                this.controller.claimSeal(targetIdx, targetAlign);
+                await this.controller.claimSeal(targetIdx, targetAlign);
               } else {
                 this.controller.addLog(`Thrones cannot change a Seal that already has a Champion.`);
               }
@@ -297,11 +307,11 @@ export class PhaseManager {
         }
       }
 
-      // Beta
+      // Beta: Flip invulnerability + Action: +2 Power Marker on any adjacent creature (each adjacent)
       if (current.data.name === "Beta") {
         const neighbors = [];
-        if (idx > 0) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx-1] : this.controller.enemyBattlefield[idx-1]);
-        if (idx < 6) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx+1] : this.controller.enemyBattlefield[idx+1]);
+        if (idx > 0) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx - 1] : this.controller.enemyBattlefield[idx - 1]);
+        if (idx < 6) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx + 1] : this.controller.enemyBattlefield[idx + 1]);
         neighbors.forEach(n => {
           if (n) {
             n.data.powerMarkers += 2;
@@ -309,7 +319,7 @@ export class PhaseManager {
           }
         });
         current.data.isInvincible = true;
-        this.controller.addLog(`${current.data.name} buffs neighbors and gains Invulnerability`);
+        this.controller.addLog(`${current.data.name} buffs adjacent creatures +2 and gains battle invulnerability this turn`);
       }
 
       // Delta Activate: mark that Delta can sacrifice at end of round
@@ -401,7 +411,7 @@ export class PhaseManager {
 
     if (pStymied || eStymied) {
       this.controller.addLog(`Seal ${idx + 1} remains Neutral due to Stymied combat.`);
-      this.controller.claimSeal(idx, Alignment.NEUTRAL);
+      await this.controller.claimSeal(idx, Alignment.NEUTRAL);
     } else {
       if (pCard && !pBlocked) await this.controller.handleSiege(idx, pCard, true);
       else if (eCard && !eBlocked) await this.controller.handleSiege(idx, eCard, false);
@@ -470,6 +480,7 @@ export class PhaseManager {
         this.controller.seals.some(s => s.champion === other);
       if (inPlay) {
         other.data.markedByWildWolf = true;
+        other.updateVisualMarkers();
         this.controller.addLog(`${wolf.data.name} marks ${other.data.name} for destruction at end of round.`);
       }
     };
@@ -485,46 +496,43 @@ export class PhaseManager {
   }
 
   private async cleanupEndOfRoundEffects() {
-    // Destroy any creatures marked by Wild Wolf's rider
+    // Wild Wolf: collect ALL marked cards first (battlefield + champions), then destroy — avoids missing cards that moved (e.g. ascended)
+    const wildWolfVictims: { card: CardEntity; isEnemy: boolean; idx: number; isChampion: boolean }[] = [];
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
       const pCard = this.controller.playerBattlefield[i];
-      if (pCard && pCard.data.markedByWildWolf) {
-        this.controller.addLog(`${pCard.data.name} is slain by Wild Wolf's lingering bite.`);
-        this.controller.destroyCard(pCard, false, i, false);
-        pCard.data.markedByWildWolf = false;
-      }
+      if (pCard && pCard.data.markedByWildWolf) wildWolfVictims.push({ card: pCard, isEnemy: false, idx: i, isChampion: false });
       const eCard = this.controller.enemyBattlefield[i];
-      if (eCard && eCard.data.markedByWildWolf) {
-        this.controller.addLog(`${eCard.data.name} is slain by Wild Wolf's lingering bite.`);
-        this.controller.destroyCard(eCard, true, i, false);
-        eCard.data.markedByWildWolf = false;
-      }
+      if (eCard && eCard.data.markedByWildWolf) wildWolfVictims.push({ card: eCard, isEnemy: true, idx: i, isChampion: false });
     }
-
     this.controller.seals.forEach((seal, idx) => {
       const champ = seal.champion;
-      if (champ && champ.data.markedByWildWolf) {
-        this.controller.addLog(`${champ.data.name} is slain by Wild Wolf's lingering bite.`);
-        this.controller.destroyCard(champ, champ.data.isEnemy, idx, true);
-        champ.data.markedByWildWolf = false;
-      }
+      if (champ && champ.data.markedByWildWolf) wildWolfVictims.push({ card: champ, isEnemy: champ.data.isEnemy, idx, isChampion: true });
     });
+    for (const { card, isEnemy, idx, isChampion } of wildWolfVictims) {
+      this.controller.addLog(`${card.data.name} is slain by Wild Wolf's lingering bite.`);
+      this.controller.destroyCard(card, isEnemy, idx, isChampion);
+      card.data.markedByWildWolf = false;
+    }
 
     // Resolve Delta's end-of-round sacrifice and buff
-    // Enemy Delta: always auto-activate
+    // Enemy Delta: sacrifice and pick a random ally to receive +3
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
       const eCard = this.controller.enemyBattlefield[i];
       if (eCard && eCard.data.name === "Delta" && eCard.data.pendingDeltaSacrifice) {
         this.controller.addLog(`${eCard.data.name} sacrifices itself to empower an ally.`);
         this.controller.destroyCard(eCard, true, i, false);
+        const enemyAllies = [...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+        if (enemyAllies.length > 0) {
+          const target = enemyAllies[Math.floor(Math.random() * enemyAllies.length)];
+          target.data.markedForDeltaBuff = true;
+        }
       }
     }
 
-    // Player Delta: optional via decision dialog (shared with Fallen One)
+    // Player Delta: optional via decision dialog, then wait for player to choose a creature for +3
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
       const pCard = this.controller.playerBattlefield[i];
       if (pCard && pCard.data.name === "Delta" && pCard.data.pendingDeltaSacrifice) {
-        // Ask the player if they want to use Delta's sacrifice
         this.controller.updateState({
           decisionContext: 'DELTA_SACRIFICE',
           instructionText: `Use Delta to sacrifice itself and grant +3 Power Markers to an ally?`
@@ -534,20 +542,31 @@ export class PhaseManager {
           (this.controller as any).nullifyCallback = resolve;
         });
 
-        // Clear decision context from HUD
         this.controller.updateState({ decisionContext: undefined });
 
         if (confirmed) {
           this.controller.addLog(`${pCard.data.name} sacrifices itself to empower an ally.`);
           this.controller.destroyCard(pCard, false, i, false);
+
+          // Zoom out so player can see the board, then wait for them to select a creature for +3
+          this.controller.zoomOut();
+          await new Promise(r => setTimeout(r, 1200)); // Let zoom animation complete
+          this.controller.updateState({
+            currentPhase: Phase.DELTA_BUFF_TARGETING,
+            instructionText: "Select a creature to receive +3 Power Markers from Delta's sacrifice."
+          });
+
+          await new Promise<void>((resolve) => {
+            (this.controller as any).resolutionCallback = resolve;
+          });
         } else {
           pCard.data.pendingDeltaSacrifice = false;
         }
-        break; // Handle one player Delta per round for now
+        break;
       }
     }
 
-    // Apply +3 Power Markers to any creature marked by Delta's effect
+    // Apply +3 Power Markers to any creature marked by Delta's effect (enemy targets from above)
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
       const pBuff = this.controller.playerBattlefield[i];
       if (pBuff && pBuff.data.markedForDeltaBuff) {
@@ -565,7 +584,7 @@ export class PhaseManager {
       }
     }
 
-    this.controller.seals.forEach((seal, idx) => {
+    this.controller.seals.forEach((seal) => {
       const champBuff = seal.champion;
       if (champBuff && champBuff.data.markedForDeltaBuff) {
         champBuff.data.powerMarkers += 3;
@@ -584,7 +603,7 @@ export class PhaseManager {
       const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
       const targetAlign = isPlayer ? pAlign : eAlign;
       this.controller.addLog(`${isPlayer ? 'Player' : 'Enemy'} influences Seal ${idx + 1} towards ${targetAlign}`);
-      this.controller.claimSeal(idx, targetAlign);
+      await this.controller.claimSeal(idx, targetAlign);
     }
   }
 

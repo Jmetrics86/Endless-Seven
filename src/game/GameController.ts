@@ -376,14 +376,35 @@ export class GameController implements IGameController {
     gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.8 });
   }
 
-  public claimSeal(idx: number, status: Alignment) {
+  public async claimSeal(idx: number, status: Alignment): Promise<void> {
     if (this.state.lockedSealIndex === idx) {
       this.addLog(`Seal ${idx + 1} is locked and cannot be changed.`);
       return;
     }
-    // Luna: Final Act: Nullify enemy Influence change.
-    const hasLuna = [...this.playerLimbo, ...this.enemyLimbo].some(c => c.data.name === "Luna" && c.data.isEnemy !== (status === Alignment.DARK));
-    if (hasLuna) return;
+    // Luna: Final Act: Only when Seal has no Champion; optional — you may move Luna to Graveyard to nullify.
+    const sealWithoutChampion = !this.seals[idx].champion;
+    const lunaCard = sealWithoutChampion
+      ? [...this.playerLimbo, ...this.enemyLimbo].find(c => c.data.name === "Luna" && c.data.isEnemy !== (status === Alignment.DARK))
+      : null;
+    if (lunaCard) {
+      const isEnemyLuna = lunaCard.data.isEnemy;
+      if (isEnemyLuna) {
+        if (Math.random() < 0.5) {
+          this.abilityManager.moveToGraveyard(lunaCard);
+          this.addLog(`Enemy uses Luna from Limbo to nullify the influence change.`);
+          return;
+        }
+      } else {
+        this.updateState({ decisionContext: 'LUNA_NULLIFY', instructionText: 'Use Luna from Limbo to nullify this influence change? (Luna moves to Graveyard)' });
+        const useLuna = await new Promise<boolean>(resolve => { (this as any).nullifyCallback = resolve; });
+        this.updateState({ decisionContext: undefined });
+        if (useLuna) {
+          this.abilityManager.moveToGraveyard(lunaCard);
+          this.addLog(`Luna is moved to the Graveyard to nullify the influence change.`);
+          return;
+        }
+      }
+    }
 
     // Prophet: Passive: Prevents Purified Seals from being Corrupted while in play.
     if (status === Alignment.DARK) {
@@ -428,7 +449,7 @@ export class GameController implements IGameController {
     }
   }
 
-  private handleMouseDown(event: MouseEvent) {
+  private async handleMouseDown(event: MouseEvent) {
     if (this.state.currentPhase === Phase.PREP) {
       const limboIntersects = this.inputHandler.raycaster.intersectObjects(this.playerLimbo.map(c => c.mesh), true);
       if (limboIntersects.length > 0) {
@@ -493,7 +514,7 @@ export class GameController implements IGameController {
           card.updateVisualMarkers();
         }
       }
-    } else if (this.state.currentPhase === Phase.ABILITY_TARGETING) {
+    } else if (this.state.currentPhase === Phase.DELTA_BUFF_TARGETING) {
       const allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
@@ -501,6 +522,26 @@ export class GameController implements IGameController {
         while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
         const card = allBoard.find(c => c.mesh === obj);
         if (card) {
+          card.data.powerMarkers += 3;
+          card.updateVisualMarkers();
+          this.addLog(`${card.data.name} receives +3 Power Markers from Delta's sacrifice.`);
+          this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
+          if (this.resolutionCallback) this.resolutionCallback();
+          this.resolutionCallback = null;
+        }
+      }
+    } else if (this.state.currentPhase === Phase.ABILITY_TARGETING) {
+      const forSentinel = this.pendingAbilityData?.effect === 'sentinel_absorb';
+      const allBoard = forSentinel
+        ? ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion), ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[])
+        : ([...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[]);
+      const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
+      if (intersects.length > 0) {
+        let obj = intersects[0].object;
+        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
+        const card = allBoard.find(c => c.mesh === obj);
+        if (card) {
+          if (forSentinel && !this.playerLimbo.includes(card) && !this.enemyLimbo.includes(card)) return; // Sentinel must target Limbo
           this.abilityManager.applyAbilityEffect(card, this.pendingAbilityData);
           const phaseAfterEffect = this.state.currentPhase as Phase;
           if (phaseAfterEffect !== Phase.GAME_OVER) {
@@ -526,7 +567,7 @@ export class GameController implements IGameController {
             return;
           }
           if (!seal.champion) {
-            this.claimSeal(seal.index, this.pendingAbilityData.effect);
+            await this.claimSeal(seal.index, this.pendingAbilityData.effect);
             const phaseAfterClaim = this.state.currentPhase as Phase;
             if (phaseAfterClaim !== Phase.GAME_OVER) {
               this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });

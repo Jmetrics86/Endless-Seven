@@ -20,13 +20,13 @@ export const LIGHT_POOL: CardData[] = [
   { name: "Nephilim", faction: "Celestial", type: "Creature", power: 3, isChampion: false, ability: "Flip: Battle invulnerability this round. Activate: Choose a Seal. Enemy cannot change influence of that Seal until end of round.", hasActivate: true },
   { name: "Seraphim", faction: "Celestial", type: "Creature", power: 7, isChampion: true, ability: "Champion. Passive: While on a Seal, other Celestials are immune to creature abilities. Activate: Destroy one Marker.", hasTargetedAbility: true, effect: 'destroy_marker', targetType: 'any', hasActivate: true },
   { name: "Thrones", faction: "Celestial", type: "Creature", power: 1, isChampion: false, ability: "Flip: Change Influence of empty Seal." },
-  { name: "Alpha", faction: "Lycan", type: "Creature", power: 7, isChampion: true, ability: "Champion. Haste: Combat first. Gain 2 Power Markers after victory.", hasHaste: true },
-  { name: "Beta", faction: "Lycan", type: "Creature", power: 6, isChampion: false, ability: "Flip: Battle invulnerability. Buff adjacent unit +2." },
-  { name: "Omega", faction: "Lycan", type: "Creature", power: 5, isChampion: false, ability: "Flip: +1 Power Marker for every Lycan in Play.", markerPower: 1, needsAllocation: true },
-  { name: "Sentinel", faction: "Lycan", type: "Creature", power: 4, isChampion: false, ability: "Flip: Target card loses 2 Power.", markerWeakness: 2, needsAllocation: true },
-  { name: "Delta", faction: "Lycan", type: "Creature", power: 3, isChampion: false, ability: "Flip: Buff 3 cards +1 Power each. Activate: At end of round, sacrifice Delta to place +3 Power Markers on an ally.", markerPower: 3, needsAllocation: true, hasActivate: true },
-  { name: "Luna", faction: "Lycan", type: "Creature", power: 2, isChampion: false, ability: "Final Act: Nullify enemy Influence change." },
-  { name: "Wild Wolf", faction: "Lycan", type: "Creature", power: 1, isChampion: false, ability: "Haste: Resolve combat first.", hasHaste: true }
+  { name: "Alpha", faction: "Lycan", type: "Creature", power: 7, isChampion: true, ability: "Champion. Haste: Resolves combat before Flip. Effect: Place a +2 Power Marker on this creature after destroying an Enemy creature in battle.", hasHaste: true },
+  { name: "Beta", faction: "Lycan", type: "Creature", power: 6, isChampion: false, ability: "Flip: Cannot be destroyed by battle this turn. Action: Place a +2 Power Marker on any adjacent creature." },
+  { name: "Omega", faction: "Lycan", type: "Creature", power: 5, isChampion: false, ability: "Flip: Gain a +1 Power Marker for each Lycan in play and in Limbo." },
+  { name: "Sentinel", faction: "Lycan", type: "Creature", power: 4, isChampion: false, ability: "Flip: Choose a creature in Limbo, place Power Markers on this creature equal to that creature's Power Value.", hasTargetedAbility: true, effect: 'sentinel_absorb', targetType: 'limbo_creature' },
+  { name: "Delta", faction: "Lycan", type: "Creature", power: 3, isChampion: false, ability: "Flip: Place a +1 Power Marker on up to any 3 creatures in play. Activate: Sacrifice this creature at the end of the round and place a +3 Power Marker on any creature.", markerPower: 3, needsAllocation: true, hasActivate: true },
+  { name: "Luna", faction: "Lycan", type: "Creature", power: 2, isChampion: false, ability: "Final Act: While in Limbo, if your Enemy changes the Influence of a Seal without a Champion, you may move Luna into the Graveyard to Nullify that action." },
+  { name: "Wild Wolf", faction: "Lycan", type: "Creature", power: 1, isChampion: false, ability: "Haste: Resolves battle before Flip abilities. Effect: Any creature that does battle with Wild Wolf is destroyed at the end of the round.", hasHaste: true }
 ];
 
 export const DARK_POOL: CardData[] = [

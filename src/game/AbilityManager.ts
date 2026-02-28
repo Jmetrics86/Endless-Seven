@@ -56,7 +56,9 @@ export class AbilityManager {
       source.data.weaknessMarkers += totalW;
       source.updateVisualMarkers();
     } else if (effect === 'corrupt_undefended') {
-      this.controller.seals.filter(s => !s.champion && s.alignment === Alignment.LIGHT).forEach(s => this.controller.claimSeal(s.index, Alignment.DARK));
+      for (const s of this.controller.seals.filter(s => !s.champion && s.alignment === Alignment.LIGHT)) {
+        await this.controller.claimSeal(s.index, Alignment.DARK);
+      }
     }
     await new Promise(r => setTimeout(r, 600));
   }
@@ -71,6 +73,14 @@ export class AbilityManager {
     }
 
     if (target.data.isInvincible && effect !== 'destroy_marker') return;
+
+    if (effect === 'sentinel_absorb') {
+      const powerValue = target.data.power;
+      source.data.powerMarkers += powerValue;
+      source.updateVisualMarkers();
+      this.controller.addLog(`${source.data.name} gains ${powerValue} Power Markers from ${target.data.name}'s Power Value in Limbo.`);
+      return;
+    }
 
     if (effect === 'destroy_marker') {
       if (target.data.powerMarkers > 0) {
@@ -157,9 +167,30 @@ export class AbilityManager {
 
   public async handleTargetedAbility(source: CardEntity, isAI: boolean) {
     const data = source.data;
+    if (data.targetType === 'limbo_creature') {
+      const targets = [...this.controller.playerLimbo, ...this.controller.enemyLimbo];
+      if (isAI) {
+        if (targets.length > 0) {
+          const target = targets[Math.floor(Math.random() * targets.length)];
+          this.applyAbilityEffect(target, { source, effect: data.effect });
+        } else {
+          this.controller.addLog(`${source.data.name} finds no creature in Limbo to absorb.`);
+        }
+        return Promise.resolve();
+      }
+      this.controller.updateState({
+        currentPhase: Phase.ABILITY_TARGETING,
+        instructionText: 'Sentinel: Choose a creature in Limbo (power value added to Sentinel).'
+      });
+      this.controller.zoomOut();
+      return new Promise<void>((resolve) => {
+        (this.controller as any).resolutionCallback = resolve;
+        (this.controller as any).pendingAbilityData = { source, effect: data.effect, targetType: data.targetType };
+      });
+    }
     if (isAI) {
-      const targets = (data.targetType === 'creature' 
-        ? this.controller.playerBattlefield 
+      const targets = (data.targetType === 'creature'
+        ? this.controller.playerBattlefield
         : [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
       ).filter(c => c !== null) as CardEntity[];
 
@@ -168,7 +199,7 @@ export class AbilityManager {
       }
       return Promise.resolve();
     } else {
-      this.controller.updateState({ 
+      this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
         instructionText: `Select a target to ${data.effect?.toUpperCase()}.`
       });
@@ -202,7 +233,7 @@ export class AbilityManager {
       });
 
       if (targetIdx !== -1) {
-        this.controller.claimSeal(targetIdx, Alignment.LIGHT);
+        await this.controller.claimSeal(targetIdx, Alignment.LIGHT);
         this.controller.addLog(`Martyr Purifies Seal ${targetIdx + 1}`);
         this.moveToGraveyard(card);
       } else {
@@ -252,7 +283,7 @@ export class AbilityManager {
     return false;
   }
 
-  private moveToGraveyard(card: CardEntity) {
+  public moveToGraveyard(card: CardEntity) {
     const isEnemy = card.data.isEnemy;
     const limbo = isEnemy ? this.controller.enemyLimbo : this.controller.playerLimbo;
     const grave = isEnemy ? this.controller.enemyGraveyard : this.controller.playerGraveyard;
@@ -297,7 +328,7 @@ export class AbilityManager {
     if (isAI) {
       const targetAlign = effect === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
       const validSeals = this.controller.seals.filter(s => !s.champion && (s.alignment === targetAlign || s.alignment === Alignment.NEUTRAL));
-      if (validSeals.length > 0) this.controller.claimSeal(validSeals[0].index, effect);
+      if (validSeals.length > 0) await this.controller.claimSeal(validSeals[0].index, effect);
       return Promise.resolve();
     } else {
       this.controller.updateState({ 

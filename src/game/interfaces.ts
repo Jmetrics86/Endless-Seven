@@ -38,7 +38,7 @@ export interface IGameController {
   handleTargetedAbility(source: CardEntity, isAI: boolean): Promise<void>;
   executeGlobalAbility(source: CardEntity): Promise<void>;
   handleSealTargetAbility(source: CardEntity, isAI: boolean): Promise<void>;
-  claimSeal(idx: number, alignment: Alignment): void;
+  claimSeal(idx: number, alignment: Alignment): Promise<void>;
   disposeCard(card: CardEntity): void;
   zoomIn(idx: number): void;
   zoomOut(): void;

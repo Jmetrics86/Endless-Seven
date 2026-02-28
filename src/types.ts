@@ -15,6 +15,7 @@ export enum Phase {
   COUNTER_ALLOCATION = 'COUNTER_ALLOCATION',
   ABILITY_TARGETING = 'ABILITY_TARGETING',
   SEAL_TARGETING = 'SEAL_TARGETING',
+  DELTA_BUFF_TARGETING = 'DELTA_BUFF_TARGETING',
   GAME_OVER = 'GAME_OVER'
 }
 
@@ -56,6 +57,6 @@ export interface GameState {
   weaknessPool: number;
   abilitySourceCardName?: string;
   lockedSealIndex?: number;
-  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE';
+  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY';
   logs: string[];
 }
