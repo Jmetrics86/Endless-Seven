@@ -7,7 +7,8 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GameController } from './game/GameController';
 import { GAME_VERSION } from './constants';
-import { Alignment, Phase, GameState } from './types';
+import { Alignment, Phase, GameState, HoveredCardInfo } from './types';
+import { cardArtUrl } from './cardArtPaths';
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -229,6 +230,11 @@ export default function App() {
               Skip Interaction
             </button>
           </div>
+
+          {/* Small-screen only: magnified card preview over the log when hovering a card */}
+          {gameState.hoveredCard && (
+            <CardPreviewOverlay card={gameState.hoveredCard} />
+          )}
         </div>
       )}
 
@@ -336,5 +342,55 @@ function AlignmentCard({ title, description, icon, color, onClick }: any) {
       <h2 className="text-2xl mb-4 tracking-widest" style={{ color }}>{title}</h2>
       <p className="text-[0.7rem] text-gray-500 italic leading-relaxed">{description}</p>
     </motion.div>
+  );
+}
+
+/** Magnified card preview over the interaction log; disappears when not hovering a card. */
+function CardPreviewOverlay({ card }: { card: HoveredCardInfo }) {
+  const effectivePower = card.power + card.powerMarkers - card.weaknessMarkers;
+  const faceSrc = card.faceArtPath ? cardArtUrl(card.faceArtPath) : undefined;
+
+  return (
+    <div
+      className="absolute right-0 top-1/2 -translate-y-1/2 z-20 pointer-events-none flex items-center justify-center p-2"
+      style={{
+        width: 'min(20rem, 92vw)',
+        height: 'min(32rem, 72vh)'
+      }}
+    >
+      <div className="w-full h-full rounded-xl overflow-hidden border-2 border-white/20 bg-black/90 shadow-2xl flex flex-col">
+        {/* Card art or placeholder */}
+        <div className="flex-1 min-h-0 relative flex items-center justify-center bg-black/60">
+          {faceSrc ? (
+            <img
+              src={faceSrc}
+              alt={card.name}
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <div className="text-gray-500 text-center px-4 font-cinzel text-sm">
+              {card.name}
+            </div>
+          )}
+        </div>
+        {/* Overlay: name, power, markers, type */}
+        <div className="shrink-0 p-3 bg-gradient-to-t from-black/95 to-transparent border-t border-white/10 space-y-1">
+          <div className="text-white font-bold text-sm uppercase tracking-wider truncate">{card.name}</div>
+          <div className="flex items-center justify-between gap-2 text-[0.7rem]">
+            <span className="text-[#00f2ff] font-bold">Power {effectivePower}</span>
+            {card.powerMarkers > 0 && (
+              <span className="text-[#00f2ff]">+{card.powerMarkers} P</span>
+            )}
+            {card.weaknessMarkers > 0 && (
+              <span className="text-[#ff0044]">−{card.weaknessMarkers} W</span>
+            )}
+          </div>
+          <div className="text-[0.65rem] text-gray-400 uppercase tracking-wider">
+            {card.faction} · {card.isChampion ? 'Champion' : card.type}
+          </div>
+          <div className="text-[0.6rem] text-gray-500 leading-tight line-clamp-2">{card.ability}</div>
+        </div>
+      </div>
+    </div>
   );
 }

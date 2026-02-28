@@ -7,13 +7,35 @@ import * as THREE from 'three';
 import { CardData, Alignment } from '../types';
 import { GAME_CONSTANTS } from '../constants';
 import { GameEntity } from '../engine/EntityManager';
+import { CARD_ART_PATHS, CARD_BACK_PATH, cardArtUrl } from '../cardArtPaths';
+
+/** Shared card back texture (loaded once). */
+let sharedBackTexture: THREE.Texture | null = null;
+/** Back planes waiting for shared back texture. */
+const pendingBackMaterials: THREE.MeshBasicMaterial[] = [];
+
+function ensureBackTextureLoaded(mat: THREE.MeshBasicMaterial): void {
+  if (sharedBackTexture) {
+    mat.map = sharedBackTexture;
+    return;
+  }
+  pendingBackMaterials.push(mat);
+  if (pendingBackMaterials.length === 1) {
+    const loader = new THREE.TextureLoader();
+    loader.load('/' + CARD_BACK_PATH, (tex) => {
+      sharedBackTexture = tex;
+      pendingBackMaterials.forEach(m => { m.map = tex; });
+      pendingBackMaterials.length = 0;
+    });
+  }
+}
 
 export class CardEntity implements GameEntity {
   public mesh: THREE.Group;
-  public data: CardData & { 
-    isEnemy: boolean; 
-    faceUp: boolean; 
-    powerMarkers: number; 
+  public data: CardData & {
+    isEnemy: boolean;
+    faceUp: boolean;
+    powerMarkers: number;
     weaknessMarkers: number;
     isInvincible: boolean;
     isSuppressed: boolean;
@@ -38,6 +60,12 @@ export class CardEntity implements GameEntity {
   private tMesh: THREE.Mesh;
   private nMesh: THREE.Mesh;
   private xMesh: THREE.Mesh;
+
+  /** Face label mesh (top of card); material.map may be replaced when art loads. */
+  private faceLabel: THREE.Mesh;
+  /** Back plane (bottom of card); shows when card is face down. */
+  private backPlane: THREE.Mesh;
+  private defaultFaceTex: THREE.CanvasTexture;
 
   constructor(data: CardData, isEnemy: boolean, playerAlignment: Alignment) {
     this.data = {
@@ -89,14 +117,39 @@ export class CardEntity implements GameEntity {
     ctx.font = 'bold 30px Cinzel';
     ctx.fillText(data.isChampion ? 'CHAMPION' : data.type.toUpperCase(), 128, 310);
 
-    const tex = new THREE.CanvasTexture(canvas);
-    const label = new THREE.Mesh(
+    this.defaultFaceTex = new THREE.CanvasTexture(canvas);
+    this.faceLabel = new THREE.Mesh(
       new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W * 0.95, GAME_CONSTANTS.CARD_H * 0.95),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true })
+      new THREE.MeshBasicMaterial({ map: this.defaultFaceTex, transparent: true })
     );
-    label.rotation.x = -Math.PI / 2;
-    label.position.y = 0.08;
-    this.mesh.add(label);
+    this.faceLabel.rotation.x = -Math.PI / 2;
+    this.faceLabel.position.y = 0.08;
+    this.mesh.add(this.faceLabel);
+
+    // Card back plane (visible when face-down)
+    const backGeo = new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W * 0.95, GAME_CONSTANTS.CARD_H * 0.95);
+    const backMat = new THREE.MeshBasicMaterial({
+      map: sharedBackTexture ?? undefined,
+      transparent: true
+    });
+    this.backPlane = new THREE.Mesh(backGeo, backMat);
+    this.backPlane.rotation.x = Math.PI / 2;
+    this.backPlane.position.y = -0.08;
+    this.mesh.add(this.backPlane);
+    ensureBackTextureLoaded(backMat);
+
+    // Load face art if available
+    const facePath = CARD_ART_PATHS[data.name];
+    if (facePath) {
+      const loader = new THREE.TextureLoader();
+      loader.load(cardArtUrl(facePath), (tex) => {
+        const mat = this.faceLabel.material as THREE.MeshBasicMaterial;
+        if (mat && mat.map !== this.defaultFaceTex) return;
+        mat.map = tex;
+      }, undefined, () => {
+        // On error keep canvas fallback
+      });
+    }
 
     // Markers
     this.pCanvas = document.createElement('canvas');

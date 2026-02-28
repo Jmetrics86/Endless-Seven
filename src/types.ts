@@ -41,6 +41,20 @@ export interface CardData {
   hasActivate?: boolean;
 }
 
+/** Card summary for magnified hover preview (small screens). */
+export interface HoveredCardInfo {
+  name: string;
+  faction: string;
+  power: number;
+  type: string;
+  isChampion: boolean;
+  ability: string;
+  powerMarkers: number;
+  weaknessMarkers: number;
+  /** Path under public/ for face art, or undefined if none. */
+  faceArtPath?: string;
+}
+
 export interface GameState {
   playerAlignment: Alignment;
   currentRound: number;
@@ -61,4 +75,6 @@ export interface GameState {
   /** Stable message for the current decision dialog (not overwritten by hover). */
   decisionMessage?: string;
   logs: string[];
+  /** Set when a card is hovered (for small-screen magnified preview). Cleared when not hovered or when a prompt is active. */
+  hoveredCard?: HoveredCardInfo | null;
 }

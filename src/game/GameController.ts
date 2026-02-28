@@ -10,8 +10,9 @@ import { InputHandler } from '../engine/InputHandler';
 import { EntityManager } from '../engine/EntityManager';
 import { CardEntity } from '../entities/CardEntity';
 import { SealEntity } from '../entities/SealEntity';
-import { Alignment, Phase, CardData, GameState } from '../types';
+import { Alignment, Phase, CardData, GameState, HoveredCardInfo } from '../types';
 import { LIGHT_POOL, DARK_POOL, GAME_CONSTANTS } from '../constants';
+import { CARD_ART_PATHS } from '../cardArtPaths';
 import { UIManager } from './UIManager';
 import { AbilityManager } from './AbilityManager';
 import { PhaseManager } from './PhaseManager';
@@ -447,6 +448,7 @@ export class GameController implements IGameController {
       this.state.currentPhase === Phase.DELTA_BUFF_TARGETING;
     if (promptActive) {
       this.selectedObject = null;
+      this.updateState({ hoveredCard: null });
       return;
     }
 
@@ -459,10 +461,22 @@ export class GameController implements IGameController {
       const card = allCards.find(c => c.mesh === obj);
       if (card && this.selectedObject !== card) {
         this.selectedObject = card;
-        this.updateState({ instructionText: `${card.data.name}: ${card.data.ability}` });
+        const hovered: HoveredCardInfo = {
+          name: card.data.name,
+          faction: card.data.faction,
+          power: card.data.power,
+          type: card.data.type,
+          isChampion: card.data.isChampion,
+          ability: card.data.ability,
+          powerMarkers: card.data.powerMarkers,
+          weaknessMarkers: card.data.weaknessMarkers,
+          faceArtPath: CARD_ART_PATHS[card.data.name]
+        };
+        this.updateState({ instructionText: `${card.data.name}: ${card.data.ability}`, hoveredCard: hovered });
       }
     } else {
       this.selectedObject = null;
+      this.updateState({ hoveredCard: null });
     }
   }
 
