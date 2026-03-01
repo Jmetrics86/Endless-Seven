@@ -44,8 +44,10 @@ export class GameController implements IGameController {
   public playerGraveyardMesh!: THREE.Group;
   public enemyGraveyardMesh!: THREE.Group;
   private slotMeshes: THREE.Mesh[] = [];
-  /** Materials for deck/limbo/graveyard pile layers; get card back texture when loaded. */
+  /** Materials for deck pile layers only (card back texture when loaded). */
   private pileCardBackMaterials: THREE.MeshBasicMaterial[] = [];
+  /** Meshes used for zone hover detection (Limbo/Graveyard base planes). */
+  private zoneHoverMeshes: { mesh: THREE.Mesh; zone: 'playerLimbo' | 'enemyLimbo' | 'playerGraveyard' | 'enemyGraveyard' }[] = [];
 
   public isProcessing = false;
   private activeSelection: CardEntity | null = null;
@@ -148,27 +150,39 @@ export class GameController implements IGameController {
     this.enemyDeckMesh.position.set(deckOffset, 0.2, -6);
     this.sceneManager.scene.add(this.enemyDeckMesh);
 
-    this.playerLimboMesh = this.createPile("LIMBO", 0xcccccc);
+    this.playerLimboMesh = this.createPile('LIMBO', 0xcccccc, 2);
     this.playerLimboMesh.position.set(limboOffset, 0.05, 6);
     this.sceneManager.scene.add(this.playerLimboMesh);
+    this.registerZoneHoverMesh(this.playerLimboMesh, 'playerLimbo');
 
-    this.enemyLimboMesh = this.createPile("LIMBO", 0xcccccc);
+    this.enemyLimboMesh = this.createPile('LIMBO', 0xcccccc, 2);
     this.enemyLimboMesh.position.set(limboOffset, 0.05, -6);
     this.sceneManager.scene.add(this.enemyLimboMesh);
+    this.registerZoneHoverMesh(this.enemyLimboMesh, 'enemyLimbo');
 
     const graveyardOffset = limboOffset + 4;
-    this.playerGraveyardMesh = this.createPile("GRAVE", 0x888888);
+    this.playerGraveyardMesh = this.createPile('GRAVE', 0x888888, 2);
     this.playerGraveyardMesh.position.set(graveyardOffset, 0.05, 6);
     this.sceneManager.scene.add(this.playerGraveyardMesh);
+    this.registerZoneHoverMesh(this.playerGraveyardMesh, 'playerGraveyard');
 
-    this.enemyGraveyardMesh = this.createPile("GRAVE", 0x888888);
+    this.enemyGraveyardMesh = this.createPile('GRAVE', 0x888888, 2);
     this.enemyGraveyardMesh.position.set(graveyardOffset, 0.05, -6);
     this.sceneManager.scene.add(this.enemyGraveyardMesh);
+    this.registerZoneHoverMesh(this.enemyGraveyardMesh, 'enemyGraveyard');
 
     this.loadPileCardBackTexture();
   }
 
-  private createPile(text: string, labelColor: number): THREE.Group {
+  private registerZoneHoverMesh(pileGroup: THREE.Group, zone: 'playerLimbo' | 'enemyLimbo' | 'playerGraveyard' | 'enemyGraveyard') {
+    const base = pileGroup.children[0] as THREE.Mesh;
+    if (base && base.isMesh) {
+      base.userData = { zone };
+      this.zoneHoverMeshes.push({ mesh: base, zone });
+    }
+  }
+
+  private createPile(type: 'DECK' | 'LIMBO' | 'GRAVE', labelColor: number, labelOffsetZ?: number): THREE.Group {
     const group = new THREE.Group();
     const base = new THREE.Mesh(
       new THREE.BoxGeometry(GAME_CONSTANTS.CARD_W + 0.3, 0.1, GAME_CONSTANTS.CARD_H + 0.3),
@@ -176,23 +190,27 @@ export class GameController implements IGameController {
     );
     group.add(base);
 
-    for (let i = 0; i < 6; i++) {
-      const mat = new THREE.MeshBasicMaterial({
-        color: 0x1a1a1a,
-        transparent: true,
-        side: THREE.DoubleSide
-      });
-      this.pileCardBackMaterials.push(mat);
-      const layer = new THREE.Mesh(
-        new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W, GAME_CONSTANTS.CARD_H),
-        mat
-      );
-      layer.rotation.x = -Math.PI / 2;
-      layer.position.y = 0.05 + (i * 0.06);
-      layer.rotation.z = (Math.random() - 0.5) * 0.15;
-      group.add(layer);
+    const isDeck = type === 'DECK';
+    if (isDeck) {
+      for (let i = 0; i < 6; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0x1a1a1a,
+          transparent: true,
+          side: THREE.DoubleSide
+        });
+        this.pileCardBackMaterials.push(mat);
+        const layer = new THREE.Mesh(
+          new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W, GAME_CONSTANTS.CARD_H),
+          mat
+        );
+        layer.rotation.x = -Math.PI / 2;
+        layer.position.y = 0.05 + (i * 0.06);
+        layer.rotation.z = (Math.random() - 0.5) * 0.15;
+        group.add(layer);
+      }
     }
 
+    const text = type === 'GRAVE' ? 'Grave' : type;
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 128;
@@ -208,7 +226,10 @@ export class GameController implements IGameController {
       new THREE.MeshBasicMaterial({ map: tex, transparent: true, color: labelColor })
     );
     label.rotation.x = -Math.PI / 2;
-    label.position.y = 0.8;
+    label.position.y = isDeck ? 0.8 : 0.06;
+    if (labelOffsetZ != null) {
+      label.position.z = labelOffsetZ;
+    }
     group.add(label);
 
     return group;
@@ -335,6 +356,7 @@ export class GameController implements IGameController {
   }
 
   public updateState(patch: Partial<GameState>) {
+    this.updateLimboGraveyardVisibility();
     const zonePatch: Partial<GameState> = {
       playerLimboCards: this.playerLimbo.map((c) => this.cardToHoveredInfo(c)),
       enemyLimboCards: this.enemyLimbo.map((c) => this.cardToHoveredInfo(c)),
@@ -344,6 +366,16 @@ export class GameController implements IGameController {
       enemyDeckCards: this.enemyDeck.map((d) => this.cardDataToHoveredInfo(d))
     };
     this.uiManager.updateState({ ...zonePatch, ...patch }, this.playerDeck.length, this.enemyDeck.length, this.playerGraveyard.length, this.enemyGraveyard.length);
+  }
+
+  /** Only the top card in each Limbo/Graveyard pile is visible; others are hidden. */
+  private updateLimboGraveyardVisibility() {
+    for (const arr of [this.playerLimbo, this.enemyLimbo, this.playerGraveyard, this.enemyGraveyard]) {
+      const topIndex = arr.length - 1;
+      arr.forEach((card, i) => {
+        card.mesh.visible = i === topIndex;
+      });
+    }
   }
 
   /** Called from UI when user selects a card from the Limbo search modal (e.g. for Sentinel ability). */
@@ -475,7 +507,8 @@ export class GameController implements IGameController {
       x: mesh.position.x + (Math.random() - 0.5),
       y: 0.2 + (limbo.length * 0.05),
       z: mesh.position.z + (Math.random() - 0.5),
-      duration: 0.8
+      duration: 0.8,
+      onComplete: () => this.updateLimboGraveyardVisibility()
     });
     gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.8 });
   }
@@ -570,14 +603,33 @@ export class GameController implements IGameController {
           faceArtPath: CARD_ART_PATHS[card.data.name]
         };
         if (promptActive) {
-          this.updateState({ hoveredCard: hovered });
+          this.updateState({ hoveredCard: hovered, hoveredZone: null });
         } else {
-          this.updateState({ instructionText: `${card.data.name}: ${card.data.ability}`, hoveredCard: hovered });
+          this.updateState({ instructionText: `${card.data.name}: ${card.data.ability}`, hoveredCard: hovered, hoveredZone: null });
         }
       }
     } else {
+      const zoneMeshes = this.zoneHoverMeshes.map((z) => z.mesh);
+      const zoneIntersects = this.inputHandler.raycaster.intersectObjects(zoneMeshes);
+      let hoveredZone: GameState['hoveredZone'] = null;
+      if (zoneIntersects.length > 0) {
+        const hitMesh = zoneIntersects[0].object as THREE.Mesh;
+        const entry = this.zoneHoverMeshes.find((z) => z.mesh === hitMesh);
+        if (entry) {
+          hoveredZone = { zone: entry.zone, count: this.getZoneCount(entry.zone) };
+        }
+      }
       this.selectedObject = null;
-      this.updateState({ hoveredCard: null });
+      this.updateState({ hoveredCard: null, hoveredZone });
+    }
+  }
+
+  private getZoneCount(zone: 'playerLimbo' | 'enemyLimbo' | 'playerGraveyard' | 'enemyGraveyard'): number {
+    switch (zone) {
+      case 'playerLimbo': return this.playerLimbo.length;
+      case 'enemyLimbo': return this.enemyLimbo.length;
+      case 'playerGraveyard': return this.playerGraveyard.length;
+      case 'enemyGraveyard': return this.enemyGraveyard.length;
     }
   }
 

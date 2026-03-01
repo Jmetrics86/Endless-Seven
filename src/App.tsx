@@ -220,6 +220,14 @@ export default function App() {
             <div className="text-sm text-gray-300 italic text-center max-w-2xl mb-4">
               {gameState.instructionText}
             </div>
+            {gameState.hoveredZone && (
+              <div className="text-[0.7rem] text-[#00f2ff]/90 uppercase tracking-wider mb-2">
+                {gameState.hoveredZone.zone === 'playerLimbo' || gameState.hoveredZone.zone === 'enemyLimbo'
+                  ? 'Limbo'
+                  : 'Graveyard'}
+                : {gameState.hoveredZone.count} card{gameState.hoveredZone.count !== 1 ? 's' : ''}
+              </div>
+            )}
             {gameState.currentPhase === Phase.PREP && (
               <div className="text-[0.65rem] text-gray-500 uppercase tracking-wider text-center">
                 Click a card in your Limbo to use its ability (e.g. Martyr, Saint Michael).

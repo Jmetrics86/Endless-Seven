@@ -272,11 +272,11 @@ export class PhaseManager {
 
       // Nephilim Activate
       if (isActivate && current.data.name === "Nephilim") {
-        await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
+        await (this.controller.abilityManager as any).handleActivateAbility(current, current.data.isEnemy);
       }
       // The Almighty, The Allotter, Saint Michael, The Spinner, Lord, Greed: Activate
       if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner" || current.data.name === "Lord" || current.data.name === "Greed" || current.data.name === "The Destroyer" || current.data.name === "Lilith" || current.data.name === "Death")) {
-        await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
+        await (this.controller.abilityManager as any).handleActivateAbility(current, current.data.isEnemy);
       }
 
       // Faction Presence: The Spinner (Light) on Flip; Lord is Activate-only (handled in handleActivateAbility). Only flipped cards count.
