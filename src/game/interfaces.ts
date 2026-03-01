@@ -34,7 +34,7 @@ export interface IGameController {
   addLog(msg: string): void;
   isImmuneToAbilities(target: CardEntity, source: CardEntity): boolean;
   isProtected(card: CardEntity): boolean;
-  destroyCard(card: CardEntity, isEnemy: boolean, idx: number, isChampion: boolean): void;
+  destroyCard(card: CardEntity, isEnemy: boolean, idx: number, isChampion: boolean, killedBy?: { cardName: string; cause: 'combat' | 'ability' }): void;
   allocateCounters(card: CardEntity, isAI: boolean): Promise<void>;
   handleTargetedAbility(source: CardEntity, isAI: boolean): Promise<void>;
   executeGlobalAbility(source: CardEntity): Promise<void>;

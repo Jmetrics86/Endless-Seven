@@ -81,9 +81,11 @@ export interface GameState {
   weaknessPool: number;
   abilitySourceCardName?: string;
   lockedSealIndex?: number;
-  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY' | 'ALMIGHTY_MARKER_TYPE' | 'LUST_SEAL_INFLUENCE';
+  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY' | 'ALMIGHTY_MARKER_TYPE' | 'LUST_SEAL_INFLUENCE' | 'DEATH_CREATURE_TYPE';
   /** Seal index when choosing influence (e.g. Lust effect). */
   sealIndexForChoice?: number;
+  /** Death Flip: creature types in play to choose from (Avatar, God, Horseman, Vampyre, Lycan, Celestial, Daemon). */
+  creatureTypeOptions?: string[];
   /** Stable message for the current decision dialog (not overwritten by hover). */
   decisionMessage?: string;
   logs: string[];
@@ -99,4 +101,8 @@ export interface GameState {
   enemyDeckCards: HoveredCardInfo[];
   /** True when in ABILITY_TARGETING and the target must be a creature in Limbo (e.g. Sentinel). */
   isSelectingLimboTarget?: boolean;
+  /** Set when game ends: who won or draw. */
+  gameOverResult?: 'player' | 'enemy' | 'draw';
+  /** Human-readable win condition that was enacted (e.g. "Majority of Seals (4 of 7)", "Horseman (4 Horsemen + Champion on Seal)"). */
+  gameOverWinCondition?: string;
 }

@@ -275,21 +275,21 @@ export class PhaseManager {
         await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
       }
       // The Almighty, The Allotter, Saint Michael, The Spinner, Lord, Greed: Activate
-      if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner" || current.data.name === "Lord" || current.data.name === "Greed")) {
+      if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner" || current.data.name === "Lord" || current.data.name === "Greed" || current.data.name === "The Destroyer" || current.data.name === "Lilith" || current.data.name === "Death")) {
         await (this.controller.abilityManager as any).handleActivateAbility(current, side === 'enemy');
       }
 
-      // Faction Presence: The Spinner (Light) on Flip; Lord is Activate-only (handled in handleActivateAbility)
+      // Faction Presence: The Spinner (Light) on Flip; Lord is Activate-only (handled in handleActivateAbility). Only flipped cards count.
       if (current.data.name === "The Spinner") {
         const count = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
-          .filter(c => c !== null && c.data.faction === current!.data.faction).length;
+          .filter(c => c !== null && (c as CardEntity).data.faceUp && c.data.faction === current!.data.faction).length;
         current.data.powerMarkers += count;
         current.updateVisualMarkers();
         this.controller.addLog(`${current.data.name} gains ${count} Power Markers from faction presence`);
       }
       if (current.data.name === "Omega") {
         const inPlay = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
-          .filter(c => c !== null && c.data.faction === "Lycan").length;
+          .filter(c => c !== null && (c as CardEntity).data.faceUp && c.data.faction === "Lycan").length;
         const inLimbo = [...this.controller.playerLimbo, ...this.controller.enemyLimbo]
           .filter(c => c.data.faction === "Lycan").length;
         const count = inPlay + inLimbo;
@@ -353,13 +353,13 @@ export class PhaseManager {
         }
       }
 
-      // Beta: Flip invulnerability + Action: +2 Power Marker on any adjacent creature (each adjacent)
+      // Beta: Flip invulnerability + Action: +2 Power Marker on any adjacent creature (each adjacent). Only flipped cards are affected.
       if (current.data.name === "Beta") {
         const neighbors = [];
         if (idx > 0) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx - 1] : this.controller.enemyBattlefield[idx - 1]);
         if (idx < 6) neighbors.push(side === 'player' ? this.controller.playerBattlefield[idx + 1] : this.controller.enemyBattlefield[idx + 1]);
         neighbors.forEach(n => {
-          if (n) {
+          if (n && n.data.faceUp) {
             n.data.powerMarkers += 2;
             n.updateVisualMarkers();
           }
@@ -378,8 +378,8 @@ export class PhaseManager {
       if (current.data.name === "Lust") {
         if (opponent && !this.controller.abilityManager.isImmuneToAbilities(opponent, current)) {
           this.controller.addLog(`${current.data.name} forces mutual sacrifice with ${opponent.data.name}`);
-          this.controller.destroyCard(current, side === 'enemy', idx, false);
-          this.controller.destroyCard(opponent, side === 'player' ? false : true, idx, false);
+          this.controller.destroyCard(current, side === 'enemy', idx, false, { cardName: 'Lust', cause: 'ability' });
+          this.controller.destroyCard(opponent, side === 'player' ? false : true, idx, false, { cardName: 'Lust', cause: 'ability' });
           // Effect: After sacrifice, if the Seal has no Champion, you may change the Influence of the seal
           const seal = this.controller.seals[idx];
           if (current.data.hasLustSealEffect && !seal.champion) {
@@ -415,6 +415,105 @@ export class PhaseManager {
       }
 
       // Duke: Flip = place any creature in play on top of that player's deck (handled via hasTargetedAbility)
+
+      // Death: Flip = Choose a creature type, destroy all cards of that type in play. Only flipped cards count or are destroyed.
+      // Target types: Avatar, Horseman, God, or creature factions (Vampyre, Lycan, Celestial, Daemon) — not generic "Creature".
+      if (current.data.name === "Death" && isFlipping) {
+        const allInPlay = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
+        const deathTargetType = (c: CardEntity): string =>
+          c.data.type === 'Creature' ? c.data.faction : c.data.type;
+        const typesInPlay = [...new Set(allInPlay.map(deathTargetType))];
+        if (typesInPlay.length === 0) {
+          this.controller.addLog(`${current.data.name} finds no creatures in play to destroy.`);
+        } else {
+          const chosenType = side === 'enemy'
+            ? typesInPlay[Math.floor(Math.random() * typesInPlay.length)]
+            : await new Promise<string>((resolve) => {
+                this.controller.updateState({
+                  currentPhase: Phase.ABILITY_TARGETING,
+                  decisionContext: 'DEATH_CREATURE_TYPE',
+                  creatureTypeOptions: typesInPlay,
+                  instructionText: `Death: Choose a creature type to destroy all of that type in play.`,
+                  decisionMessage: `Types in play: ${typesInPlay.join(', ')}`
+                });
+                this.controller.zoomOut();
+                (this.controller as any).creatureTypeCallback = resolve;
+              });
+          this.controller.updateState({ decisionContext: undefined, creatureTypeOptions: undefined });
+          (this.controller as any).creatureTypeCallback = null;
+          if (!chosenType) {
+            this.controller.addLog(`${current.data.name} did not choose a creature type.`);
+          } else {
+            const isCreatureFaction = ['Vampyre', 'Lycan', 'Celestial', 'Daemon'].includes(chosenType);
+            const toDestroy = allInPlay.filter(c =>
+              isCreatureFaction ? (c.data.type === 'Creature' && c.data.faction === chosenType) : c.data.type === chosenType
+            );
+            const killer = { cardName: current.data.name, cause: 'ability' as const };
+            for (const card of toDestroy) {
+              const idxP = this.controller.playerBattlefield.indexOf(card);
+              const idxE = this.controller.enemyBattlefield.indexOf(card);
+              const seal = this.controller.seals.find(s => s.champion === card);
+              if (seal) {
+                this.controller.destroyCard(card, card.data.isEnemy, seal.index, true, killer);
+                seal.champion = null;
+              } else if (idxP !== -1) this.controller.destroyCard(card, false, idxP, false, killer);
+              else if (idxE !== -1) this.controller.destroyCard(card, true, idxE, false, killer);
+            }
+            this.controller.addLog(`${current.data.name} destroys all ${chosenType}(s) in play (${toDestroy.length} card(s)).`);
+          }
+        }
+      }
+
+      // Hades: Flip = +2 Power per Horseman in play
+      if (current.data.name === "Hades" && isFlipping) {
+        const horsemanCount = this.controller.abilityManager.countHorsemenInPlay(current.data.isEnemy);
+        const gain = 2 * horsemanCount;
+        current.data.powerMarkers += gain;
+        current.updateVisualMarkers();
+        this.controller.addLog(`${current.data.name} gains +2 Power per Horseman (${horsemanCount} in play) = ${gain} Power Marker(s).`);
+        // Secondary: Place any card from Limbo you control on top of your deck
+        const limbo = current.data.isEnemy ? this.controller.enemyLimbo : this.controller.playerLimbo;
+        if (limbo.length > 0) {
+          if (side === 'enemy') {
+            const pick = limbo[Math.floor(Math.random() * limbo.length)];
+            const idx = limbo.indexOf(pick);
+            limbo.splice(idx, 1);
+            const deck = current.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
+            const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = pick.data;
+            deck.push({ ...baseData });
+            this.controller.disposeCard(pick);
+            this.controller.addLog(`${current.data.name} places ${pick.data.name} from Limbo on top of deck.`);
+          } else {
+            this.controller.updateState({
+              currentPhase: Phase.ABILITY_TARGETING,
+              instructionText: "Hades (Secondary): Choose a card from your Limbo to place on top of your deck.",
+              isSelectingLimboTarget: true
+            });
+            this.controller.zoomOut();
+            await new Promise<void>((resolve) => {
+              (this.controller as any).resolutionCallback = resolve;
+              (this.controller as any).pendingAbilityData = { source: current, effect: 'hades_limbo_to_deck' };
+            });
+          }
+        }
+      }
+
+      // Pestilence: Flip = Place -2 Weakness on all Enemy creatures for each Horseman you have in play. Only flipped cards are affected.
+      if (current.data.name === "Pestilence" && isFlipping) {
+        const horsemanCount = this.controller.abilityManager.countHorsemenInPlay(current.data.isEnemy);
+        const amount = 2 * horsemanCount;
+        const enemyCreatures = (side === 'player'
+          ? [...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion).filter(c => c !== null && c!.data.isEnemy)]
+          : [...this.controller.playerBattlefield, ...this.controller.seals.map(s => s.champion).filter(c => c !== null && !c!.data.isEnemy)]
+        ).filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
+        enemyCreatures.forEach(c => {
+          if (!this.controller.abilityManager.isImmuneToAbilities(c, current)) {
+            c.data.weaknessMarkers += amount;
+            c.updateVisualMarkers();
+          }
+        });
+        this.controller.addLog(`${current.data.name} places -2 Weakness per Horseman (${horsemanCount}) on each enemy creature (${amount} total per creature).`);
+      }
 
       if (current.data.needsAllocation) {
         await this.controller.allocateCounters(current, side === 'enemy');
@@ -520,10 +619,9 @@ export class PhaseManager {
         this.controller.addLog(`${defender.data.name} cannot be destroyed by ${attacker.data.name} (attacker has Weakness Markers).`);
         stymied = true;
       } else if (!defender.data.isInvincible && !isDProtected) {
-        this.controller.addLog(`${attacker.data.name} defeats ${defender.data.name}`);
         this.controller.abilityManager.handleFinalAct(defender, attacker);
         if (elderAttacker) sendToDeckInstead(defender);
-        else this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
+        else this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp, { cardName: attacker.data.name, cause: 'combat' });
         await this.controller.abilityManager.handlePostCombat(attacker);
       } else {
         this.controller.addLog(`${defender.data.name} is Protected or Invincible. ${attacker.data.name} is stymied.`);
@@ -534,10 +632,9 @@ export class PhaseManager {
         this.controller.addLog(`${attacker.data.name} cannot be destroyed by ${defender.data.name} (attacker has Weakness Markers).`);
         stymied = true;
       } else if (!attacker.data.isInvincible && !isAProtected) {
-        this.controller.addLog(`${defender.data.name} defeats ${attacker.data.name}`);
         this.controller.abilityManager.handleFinalAct(attacker, defender);
         if (elderDefender) sendToDeckInstead(attacker);
-        else this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false);
+        else this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false, { cardName: defender.data.name, cause: 'combat' });
         await this.controller.abilityManager.handlePostCombat(defender);
       } else {
         this.controller.addLog(`${attacker.data.name} is Protected or Invincible. ${defender.data.name} is stymied.`);
@@ -551,7 +648,7 @@ export class PhaseManager {
       } else if (!attacker.data.isInvincible && !isAProtected) {
         this.controller.abilityManager.handleFinalAct(attacker, defender);
         if (elderDefender) sendToDeckInstead(attacker);
-        else this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false);
+        else this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false, { cardName: defender.data.name, cause: 'combat' });
       } else if (attacker.data.isInvincible) {
         stymied = true;
       }
@@ -561,7 +658,7 @@ export class PhaseManager {
       } else if (!defender.data.isInvincible && !isDProtected) {
         this.controller.abilityManager.handleFinalAct(defender, attacker);
         if (elderAttacker) sendToDeckInstead(defender);
-        else this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp);
+        else this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp, { cardName: attacker.data.name, cause: 'combat' });
       } else if (defender.data.isInvincible) {
         stymied = true;
       }
@@ -605,8 +702,7 @@ export class PhaseManager {
       if (champ && champ.data.markedByWildWolf) wildWolfVictims.push({ card: champ, isEnemy: champ.data.isEnemy, idx, isChampion: true });
     });
     for (const { card, isEnemy, idx, isChampion } of wildWolfVictims) {
-      this.controller.addLog(`${card.data.name} is slain by Wild Wolf's lingering bite.`);
-      this.controller.destroyCard(card, isEnemy, idx, isChampion);
+      this.controller.destroyCard(card, isEnemy, idx, isChampion, { cardName: 'Wild Wolf', cause: 'ability' });
       card.data.markedByWildWolf = false;
     }
 
@@ -742,38 +838,54 @@ export class PhaseManager {
     const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
     const pCount = this.controller.seals.filter(s => s.alignment === pAlign).length;
     const eCount = this.controller.seals.filter(s => s.alignment === eAlign).length;
+    const bothDecksEmpty = this.controller.playerDeck.length === 0 && this.controller.enemyDeck.length === 0;
 
-    if (pCount >= 4 || eCount >= 4 || (this.controller.playerDeck.length === 0 && this.controller.enemyDeck.length === 0)) {
-      this.finalizeGame();
+    if (pCount >= 4 || eCount >= 4 || bothDecksEmpty) {
+      let winCondition: string;
+      if (bothDecksEmpty) {
+        winCondition = "Draw (both decks exhausted)";
+      } else if (pCount >= 4 || eCount >= 4) {
+        const winnerCount = pCount > eCount ? pCount : eCount;
+        winCondition = winnerCount === 7 ? "All Seven Seals" : `Majority of Seals (${winnerCount} of 7)`;
+      } else {
+        winCondition = "Draw";
+      }
+      this.finalizeGame(winCondition);
     }
   }
 
-  public finalizeGame() {
+  public finalizeGame(winCondition?: string) {
     const pAlign = this.controller.state.playerAlignment;
     const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
     const pCount = this.controller.seals.filter(s => s.alignment === pAlign).length;
     const eCount = this.controller.seals.filter(s => s.alignment === eAlign).length;
 
     let body = "";
+    let result: 'player' | 'enemy' | 'draw';
 
     if (pCount > eCount) {
       body = pAlign === Alignment.LIGHT 
         ? "The Seventh Seal is Purified. The cycle of Light begins anew, casting away the shadows of the void."
         : "The Void has consumed the threshold. The world yields to the eternal rhythm of the Dark.";
       this.controller.addLog("GAME OVER: Player Victory");
+      result = 'player';
     } else if (eCount > pCount) {
       body = pAlign === Alignment.LIGHT
         ? "The Light has flickered out. The opponent's corruption has claimed the world's essence."
         : "The Light has unexpectedly pierced the veil. Your dominion of shadow has been repelled.";
       this.controller.addLog("GAME OVER: Enemy Victory");
+      result = 'enemy';
     } else {
       body = "The scales remain perfectly balanced. Neither Light nor Shadow can claim the throne of existence.";
       this.controller.addLog("GAME OVER: Draw");
+      result = 'draw';
     }
 
     this.controller.updateState({ 
       currentPhase: Phase.GAME_OVER, 
-      instructionText: body 
+      instructionText: body,
+      gameOverResult: result,
+      gameOverWinCondition: winCondition ?? (result === 'draw' ? "Draw" : "Majority of Seals")
     });
   }
 

@@ -12,7 +12,7 @@ import { CardEntity } from '../entities/CardEntity';
 import { SealEntity } from '../entities/SealEntity';
 import { Alignment, Phase, CardData, GameState, HoveredCardInfo } from '../types';
 import { LIGHT_POOL, DARK_POOL, GAME_CONSTANTS } from '../constants';
-import { CARD_ART_PATHS } from '../cardArtPaths';
+import { CARD_ART_PATHS, CARD_BACK_PATH, cardArtUrl } from '../cardArtPaths';
 import { UIManager } from './UIManager';
 import { AbilityManager } from './AbilityManager';
 import { PhaseManager } from './PhaseManager';
@@ -44,6 +44,8 @@ export class GameController implements IGameController {
   public playerGraveyardMesh!: THREE.Group;
   public enemyGraveyardMesh!: THREE.Group;
   private slotMeshes: THREE.Mesh[] = [];
+  /** Materials for deck/limbo/graveyard pile layers; get card back texture when loaded. */
+  private pileCardBackMaterials: THREE.MeshBasicMaterial[] = [];
 
   public isProcessing = false;
   private activeSelection: CardEntity | null = null;
@@ -138,33 +140,35 @@ export class GameController implements IGameController {
     const deckOffset = startX - 4;
     const limboOffset = (startX + (GAME_CONSTANTS.SEVEN - 1) * GAME_CONSTANTS.SLOT_SPACING) + 4;
 
-    this.playerDeckMesh = this.createPile(0x0077aa, "DECK", 0x00f2ff);
+    this.playerDeckMesh = this.createPile("DECK", 0x00f2ff);
     this.playerDeckMesh.position.set(deckOffset, 0.2, 6);
     this.sceneManager.scene.add(this.playerDeckMesh);
 
-    this.enemyDeckMesh = this.createPile(0xaa2233, "DECK", 0xff0044);
+    this.enemyDeckMesh = this.createPile("DECK", 0xff0044);
     this.enemyDeckMesh.position.set(deckOffset, 0.2, -6);
     this.sceneManager.scene.add(this.enemyDeckMesh);
 
-    this.playerLimboMesh = this.createPile(0x444444, "LIMBO", 0xcccccc);
+    this.playerLimboMesh = this.createPile("LIMBO", 0xcccccc);
     this.playerLimboMesh.position.set(limboOffset, 0.05, 6);
     this.sceneManager.scene.add(this.playerLimboMesh);
 
-    this.enemyLimboMesh = this.createPile(0x444444, "LIMBO", 0xcccccc);
+    this.enemyLimboMesh = this.createPile("LIMBO", 0xcccccc);
     this.enemyLimboMesh.position.set(limboOffset, 0.05, -6);
     this.sceneManager.scene.add(this.enemyLimboMesh);
 
     const graveyardOffset = limboOffset + 4;
-    this.playerGraveyardMesh = this.createPile(0x222222, "GRAVE", 0x888888);
+    this.playerGraveyardMesh = this.createPile("GRAVE", 0x888888);
     this.playerGraveyardMesh.position.set(graveyardOffset, 0.05, 6);
     this.sceneManager.scene.add(this.playerGraveyardMesh);
 
-    this.enemyGraveyardMesh = this.createPile(0x222222, "GRAVE", 0x888888);
+    this.enemyGraveyardMesh = this.createPile("GRAVE", 0x888888);
     this.enemyGraveyardMesh.position.set(graveyardOffset, 0.05, -6);
     this.sceneManager.scene.add(this.enemyGraveyardMesh);
+
+    this.loadPileCardBackTexture();
   }
 
-  private createPile(color: number, text: string, labelColor: number): THREE.Group {
+  private createPile(text: string, labelColor: number): THREE.Group {
     const group = new THREE.Group();
     const base = new THREE.Mesh(
       new THREE.BoxGeometry(GAME_CONSTANTS.CARD_W + 0.3, 0.1, GAME_CONSTANTS.CARD_H + 0.3),
@@ -173,12 +177,19 @@ export class GameController implements IGameController {
     group.add(base);
 
     for (let i = 0; i < 6; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x1a1a1a,
+        transparent: true,
+        side: THREE.DoubleSide
+      });
+      this.pileCardBackMaterials.push(mat);
       const layer = new THREE.Mesh(
-        new THREE.BoxGeometry(GAME_CONSTANTS.CARD_W, 0.05, GAME_CONSTANTS.CARD_H),
-        new THREE.MeshPhongMaterial({ color })
+        new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W, GAME_CONSTANTS.CARD_H),
+        mat
       );
+      layer.rotation.x = -Math.PI / 2;
       layer.position.y = 0.05 + (i * 0.06);
-      layer.rotation.y = (Math.random() - 0.5) * 0.15;
+      layer.rotation.z = (Math.random() - 0.5) * 0.15;
       group.add(layer);
     }
 
@@ -190,7 +201,7 @@ export class GameController implements IGameController {
     ctx.font = 'bold 44px Cinzel';
     ctx.textAlign = 'center';
     ctx.fillText(text, 128, 48);
-    
+
     const tex = new THREE.CanvasTexture(canvas);
     const label = new THREE.Mesh(
       new THREE.PlaneGeometry(3.5, 1.75),
@@ -201,6 +212,16 @@ export class GameController implements IGameController {
     group.add(label);
 
     return group;
+  }
+
+  private loadPileCardBackTexture(): void {
+    const loader = new THREE.TextureLoader();
+    loader.load(cardArtUrl(CARD_BACK_PATH), (tex) => {
+      this.pileCardBackMaterials.forEach((m) => {
+        m.map = tex;
+        m.color.setHex(0xffffff);
+      });
+    });
   }
 
   private createGridSlot(x: number, z: number) {
@@ -230,9 +251,10 @@ export class GameController implements IGameController {
   }
 
   private buildDeck(pool: CardData[]): CardData[] {
+    const normalTribes = ['Celestial', 'Lycan', 'Daemon', 'Vampyre'];
     let deck: CardData[] = [];
     pool.forEach(card => {
-      let copies = (card.type === 'Avatar' || card.type === 'God') ? 1 : 3;
+      const copies = normalTribes.includes(card.faction) ? 3 : 2;
       for (let i = 0; i < copies; i++) { deck.push({ ...card }); }
     });
     return deck.sort(() => Math.random() - 0.5);
@@ -329,8 +351,20 @@ export class GameController implements IGameController {
     const limbo = zone === 'player' ? this.playerLimbo : this.enemyLimbo;
     const card = limbo[index];
     if (!card || this.state.currentPhase !== Phase.ABILITY_TARGETING || !this.pendingAbilityData?.effect) return;
-    if (this.pendingAbilityData.effect !== 'sentinel_absorb') return;
-    this.abilityManager.applyAbilityEffect(card, this.pendingAbilityData);
+    if (this.pendingAbilityData.effect === 'sentinel_absorb') {
+      this.abilityManager.applyAbilityEffect(card, this.pendingAbilityData);
+    } else if (this.pendingAbilityData.effect === 'hades_limbo_to_deck') {
+      if (zone !== 'player') return;
+      const idx = limbo.indexOf(card);
+      if (idx !== -1) limbo.splice(idx, 1);
+      const deck = this.playerDeck;
+      const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = card.data;
+      deck.push({ ...baseData });
+      this.disposeCard(card);
+      this.addLog(`Hades places ${card.data.name} from Limbo on top of deck.`);
+    } else {
+      return;
+    }
     this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '', isSelectingLimboTarget: false });
     this.pendingAbilityData = null;
     if (this.resolutionCallback) this.resolutionCallback();
@@ -397,6 +431,10 @@ export class GameController implements IGameController {
       this.nullifyCallback(false);
       this.nullifyCallback = null;
     }
+    if ((this as any).creatureTypeCallback) {
+      (this as any).creatureTypeCallback('');
+      (this as any).creatureTypeCallback = null;
+    }
 
     if (this.state.currentPhase !== Phase.PREP && this.state.currentPhase !== Phase.GAME_OVER) {
       this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
@@ -408,7 +446,13 @@ export class GameController implements IGameController {
     return await this.phaseManager.handleBattle(attacker, defender, idx, isAgainstChamp);
   }
 
-  public destroyCard(card: CardEntity, isEnemy: boolean, idx: number, isAgainstChamp: boolean = false) {
+  public destroyCard(card: CardEntity, isEnemy: boolean, idx: number, isAgainstChamp: boolean = false, killedBy?: { cardName: string; cause: 'combat' | 'ability' }) {
+    if (killedBy) {
+      const msg = killedBy.cause === 'combat'
+        ? `${card.data.name} was killed by ${killedBy.cardName} (combat damage).`
+        : `${card.data.name} was destroyed by ${killedBy.cardName}'s ability.`;
+      this.addLog(msg);
+    }
     const limbo = isEnemy ? this.enemyLimbo : this.playerLimbo;
     const mesh = isEnemy ? this.enemyLimboMesh : this.playerLimboMesh;
     limbo.push(card);
@@ -614,7 +658,7 @@ export class GameController implements IGameController {
         }
       }
     } else if (this.state.currentPhase === Phase.COUNTER_ALLOCATION) {
-      const allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+      const allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp) as CardEntity[];
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
         let obj = intersects[0].object;
@@ -636,7 +680,7 @@ export class GameController implements IGameController {
         }
       }
     } else if (this.state.currentPhase === Phase.DELTA_BUFF_TARGETING) {
-      const allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+      const allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp) as CardEntity[];
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
         let obj = intersects[0].object;
@@ -661,9 +705,9 @@ export class GameController implements IGameController {
       } else if (forSentinel) {
         allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion), ...this.playerLimbo, ...this.enemyLimbo].filter(c => c !== null) as CardEntity[];
       } else if (forChampion) {
-        allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.isChampion) as CardEntity[];
+        allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp && c.data.isChampion) as CardEntity[];
       } else {
-        allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+        allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp) as CardEntity[];
       }
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {

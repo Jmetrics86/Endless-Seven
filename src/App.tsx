@@ -267,10 +267,30 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md"
+            className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-6"
           >
             <h1 className="text-6xl mb-4 tracking-[15px]">THE CYCLE ENDS</h1>
-            <p className="text-xl text-gray-400 mb-12">{gameState.instructionText}</p>
+            <p className="text-xl text-gray-400 text-center max-w-2xl mb-2">{gameState.instructionText}</p>
+            {gameState.gameOverWinCondition && (
+              <p className="text-sm text-[#00f2ff]/90 uppercase tracking-widest mb-8">
+                Win condition: {gameState.gameOverWinCondition}
+              </p>
+            )}
+            {gameState.logs.length > 0 && (
+              <div className="w-full max-w-2xl max-h-[40vh] mb-8 overflow-hidden flex flex-col rounded-lg border border-white/10 bg-black/40">
+                <div className="text-[0.6rem] text-gray-500 uppercase tracking-widest px-4 py-2 border-b border-white/10 shrink-0">
+                  Event log
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-1.5 scrollbar-thin">
+                  {gameState.logs.map((log, i) => (
+                    <div key={i} className="text-[0.7rem] leading-relaxed text-gray-300 font-mono">
+                      <span className="text-[#00f2ff] mr-2">»</span>
+                      {log}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <button
               onClick={() => window.location.reload()}
               className="px-12 py-4 border border-white/20 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-lg tracking-widest uppercase font-bold"
@@ -312,6 +332,35 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext === 'DEATH_CREATURE_TYPE' && gameState.creatureTypeOptions && gameState.creatureTypeOptions.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+          >
+            <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">Death — Flip</div>
+            <div className="text-xs text-gray-200 text-center max-w-xs">
+              {gameState.decisionMessage ?? gameState.instructionText}
+            </div>
+            <div className="flex flex-wrap gap-2 mt-1 justify-center">
+              {gameState.creatureTypeOptions.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => {
+                    (gameRef.current as any).creatureTypeCallback?.(t);
+                    (gameRef.current as any).creatureTypeCallback = null;
+                  }}
+                  className="px-4 py-2 bg-[#ff0044]/20 border border-[#ff0044] text-[#ff4466] hover:bg-[#ff0044]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext === 'LUST_SEAL_INFLUENCE' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -347,7 +396,7 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && gameState.decisionContext !== 'ALMIGHTY_MARKER_TYPE' && gameState.decisionContext !== 'LUST_SEAL_INFLUENCE' && (
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && gameState.decisionContext !== 'ALMIGHTY_MARKER_TYPE' && gameState.decisionContext !== 'LUST_SEAL_INFLUENCE' && gameState.decisionContext !== 'DEATH_CREATURE_TYPE' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

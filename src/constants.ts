@@ -30,13 +30,13 @@ export const LIGHT_POOL: CardData[] = [
 ];
 
 export const DARK_POOL: CardData[] = [
-  { name: "Death", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Flip: Target card loses 5 Power.", markerWeakness: 5, needsAllocation: true },
-  { name: "Famine", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Flip: Destroy any card in play.", hasTargetedAbility: true, effect: 'destroy', targetType: 'any' },
-  { name: "Pestilence", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Flip: All enemy creatures lose 2 Power.", markerWeakness: 2, needsAllocation: true },
-  { name: "War", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Post-Combat: Gain 3 Power Markers after destroying a creature." },
-  { name: "Lilith", faction: "Darkness", type: "Avatar", power: 10, isChampion: true, ability: "Win Con: Activate with 7 Seals." },
-  { name: "Hades", faction: "Darkness", type: "Avatar", power: 9, isChampion: true, ability: "Flip: Gain 2 Power Markers.", markerPower: 2, needsAllocation: true },
-  { name: "The Destroyer", faction: "Darkness", type: "God", power: 15, isChampion: true, ability: "Flip: Corrupt un-championed Light Seals.", hasGlobalAbility: true, effect: 'corrupt_undefended' },
+  { name: "Death", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Champion. Flip: Choose a creature type, destroy all of that type in play. Activate: If you have 4 Horseman in play with at least one Champion on a Seal, you win.", hasActivate: true, effect: 'destroy_creature_type' },
+  { name: "Famine", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Champion. Flip: Destroy any card in play.", hasTargetedAbility: true, effect: 'destroy', targetType: 'any' },
+  { name: "Pestilence", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Champion. Flip: Place a -2 Weakness Marker on all Enemy creatures for each Horseman you have in play." },
+  { name: "War", faction: "Darkness", type: "Horseman", power: 9, isChampion: true, ability: "Champion. Effect: After War destroys a creature in battle, place a +2 Power Marker on War for each Horseman in play." },
+  { name: "Lilith", faction: "Darkness", type: "Avatar", power: 10, isChampion: true, ability: "Champion. Activate: If you control 5+ Seals with Champions, you win. Final Act: In Limbo, move to Graveyard to destroy a card that battled this turn.", hasActivate: true, hasLimboAbility: true },
+  { name: "Hades", faction: "Darkness", type: "Avatar", power: 9, isChampion: true, ability: "Champion. Flip: Gains +2 Power per Horseman in play. Secondary: Place any card from Limbo you control on top of your deck.", markerPower: 2 },
+  { name: "The Destroyer", faction: "Darkness", type: "God", power: 15, isChampion: true, ability: "Champion. Flip: Corrupt every Purified seal without a Champion. Activate: Destroy any one Marker type.", hasGlobalAbility: true, effect: 'corrupt_undefended', hasActivate: true },
   { name: "Wrath", faction: "Daemon", type: "Creature", power: 7, isChampion: true, ability: "Champion. Flip: Place a -1 Weakness Marker on each of your enemy's creatures. Passive: Wrath cannot be destroyed in battle by any creature with a Weakness Marker.", markerWeakness: 1 },
   { name: "Pride", faction: "Daemon", type: "Creature", power: 6, isChampion: false, ability: "Flip: Place a -3 Weakness Marker on the creature across from Pride. Action: Place a +2 Power Marker on any adjacent creature.", markerWeakness: 3 },
   { name: "Greed", faction: "Daemon", type: "Creature", power: 5, isChampion: false, ability: "Flip: Cannot be destroyed by battle this turn. Activate: Transfer all Power Markers in play to this creature.", hasActivate: true },
