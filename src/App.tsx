@@ -452,7 +452,7 @@ export default function App() {
                 }}
                 className="px-5 py-2 bg-purple-600/20 border border-purple-400 text-purple-300 hover:bg-purple-600/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
               >
-                Dark
+                Dark (Corrupt)
               </button>
             </div>
           </motion.div>

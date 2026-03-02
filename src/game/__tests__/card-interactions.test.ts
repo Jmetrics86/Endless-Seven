@@ -5,7 +5,7 @@
  * Unit tests for happy-path card interactions: combat, abilities, and immunity.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Alignment, Phase } from '../../types';
 import type { CardData } from '../../types';
 import { AbilityManager } from '../AbilityManager';
@@ -485,6 +485,443 @@ describe('Post-combat – War and Alpha', () => {
   });
 });
 
+describe('Pestilence – flip weakness by Horseman count', () => {
+  let mock: ReturnType<typeof createMockControllerForBattle>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mock = createMockControllerForBattle();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.state.currentPhase = Phase.RESOLUTION;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function resolveSealWithFakeTimers(idx: number) {
+    const p = mock.phaseManager.resolveSeal(idx);
+    await vi.runAllTimersAsync();
+    return p;
+  }
+
+  it('with 0 other Horsemen in play (only Pestilence flipping): places 0 weakness on enemy creatures', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const enemyCreature = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.enemyBattlefield[0] = enemyCreature;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(enemyCreature.data.weaknessMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(0\)/)
+    );
+  });
+
+  it('with 1 Horseman in play (Pestilence + one other face-up Horseman): places -2 weakness per enemy creature', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemyCreature = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.enemyBattlefield[0] = enemyCreature;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(enemyCreature.data.weaknessMarkers).toBe(2);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(1\).*\(2 total per creature\)/)
+    );
+  });
+
+  it('with 2 Horsemen in play: places -4 weakness per enemy creature', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const death = createMockCard({
+      name: 'Death',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemyCreature = createMockCard({
+      name: 'Noble',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.playerBattlefield[2] = death;
+    mock.enemyBattlefield[0] = enemyCreature;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(enemyCreature.data.weaknessMarkers).toBe(4);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(2\).*\(4 total per creature\)/)
+    );
+  });
+
+  it('with 3 Horsemen in play: places -6 weakness per enemy creature', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const death = createMockCard({
+      name: 'Death',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const famine = createMockCard({
+      name: 'Famine',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemyCreature = createMockCard({
+      name: 'Baron',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.playerBattlefield[2] = death;
+    mock.playerBattlefield[3] = famine;
+    mock.enemyBattlefield[0] = enemyCreature;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(enemyCreature.data.weaknessMarkers).toBe(6);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(3\).*\(6 total per creature\)/)
+    );
+  });
+
+  it('only face-up enemy creatures receive weakness; face-down enemy is unaffected', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const faceUpEnemy = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const faceDownEnemy = createMockCard({
+      name: 'Noble',
+      power: 4,
+      isEnemy: true,
+      faceUp: false,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.enemyBattlefield[0] = faceUpEnemy;
+    mock.enemyBattlefield[1] = faceDownEnemy;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(faceUpEnemy.data.weaknessMarkers).toBe(2);
+    expect(faceDownEnemy.data.weaknessMarkers).toBe(0);
+  });
+
+  it('applies weakness to all enemy creatures on the battlefield (multiple slots)', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemy0 = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const enemy1 = createMockCard({
+      name: 'Noble',
+      power: 4,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const enemy2 = createMockCard({
+      name: 'Baron',
+      power: 2,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.enemyBattlefield[0] = enemy0;
+    mock.enemyBattlefield[1] = enemy1;
+    mock.enemyBattlefield[2] = enemy2;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(enemy0.data.weaknessMarkers).toBe(2);
+    expect(enemy1.data.weaknessMarkers).toBe(2);
+    expect(enemy2.data.weaknessMarkers).toBe(2);
+  });
+
+  it('applies weakness to enemy champions on seals (ascended)', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemyOnBattlefield = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const enemyChampionOnSeal = createMockCard({
+      name: 'Wrath',
+      power: 7,
+      isChampion: true,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.enemyBattlefield[0] = enemyOnBattlefield;
+    mock.seals[1].champion = enemyChampionOnSeal;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(enemyOnBattlefield.data.weaknessMarkers).toBe(2);
+    expect(enemyChampionOnSeal.data.weaknessMarkers).toBe(2);
+  });
+
+  it('applies weakness to enemies on battlefield and on multiple seals', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const death = createMockCard({
+      name: 'Death',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemyOnField = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const championOnSeal0 = createMockCard({
+      name: 'Wrath',
+      power: 7,
+      isChampion: true,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const championOnSeal3 = createMockCard({
+      name: 'Pride',
+      power: 6,
+      isChampion: false,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.playerBattlefield[2] = death;
+    mock.enemyBattlefield[0] = enemyOnField;
+    mock.seals[0].champion = championOnSeal0;
+    mock.seals[3].champion = championOnSeal3;
+
+    await resolveSealWithFakeTimers(0);
+
+    const amountPerCreature = 4;
+    expect(enemyOnField.data.weaknessMarkers).toBe(amountPerCreature);
+    expect(championOnSeal0.data.weaknessMarkers).toBe(amountPerCreature);
+    expect(championOnSeal3.data.weaknessMarkers).toBe(amountPerCreature);
+  });
+
+  it('Pestilence (Horseman) affects Sloth: immunity only applies to Creature sources', async () => {
+    const pestilence = createMockCard({
+      name: 'Pestilence',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      isEnemy: false,
+      faceUp: false,
+      weaknessMarkers: 0,
+      powerMarkers: 0,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const sloth = createMockCard({
+      name: 'Sloth',
+      power: 4,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+      abilityImmune: true,
+      type: 'Creature',
+    }) as unknown as CardEntity;
+    const normalEnemy = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: true,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = pestilence;
+    mock.playerBattlefield[1] = war;
+    mock.enemyBattlefield[0] = sloth;
+    mock.enemyBattlefield[1] = normalEnemy;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(sloth.data.weaknessMarkers).toBe(2);
+    expect(normalEnemy.data.weaknessMarkers).toBe(2);
+  });
+});
+
 describe('AbilityManager – applyAbilityEffect', () => {
   let mock: ReturnType<typeof createMockControllerForAbilities>;
 
@@ -672,5 +1109,239 @@ describe('AbilityManager – immunity and counts', () => {
 
     const count = mock.abilityManager.countHorsemenInPlay(true);
     expect(count).toBe(2);
+  });
+});
+
+/** Mock controller for Lust tests: supports alignment choice callback when LUST_SEAL_INFLUENCE is set. */
+function createMockControllerForLust(chosenAlignment: Alignment): IGameController & {
+  destroyCard: ReturnType<typeof vi.fn>;
+  addLog: ReturnType<typeof vi.fn>;
+  claimSeal: ReturnType<typeof vi.fn>;
+  updateState: ReturnType<typeof vi.fn>;
+  playerBattlefield: (CardEntity | null)[];
+  enemyBattlefield: (CardEntity | null)[];
+  seals: { index: number; champion: CardEntity | null; alignment: Alignment; mesh: { position: { x: number; y: number; z: number } } }[];
+} {
+  const playerBattlefield: (CardEntity | null)[] = Array(7).fill(null);
+  const enemyBattlefield: (CardEntity | null)[] = Array(7).fill(null);
+  const addLog = vi.fn();
+  const destroyCard = vi.fn((card: CardEntity, isEnemy: boolean, idx: number, _isChampion: boolean) => {
+    if (isEnemy) {
+      const i = enemyBattlefield.indexOf(card);
+      if (i !== -1) enemyBattlefield[i] = null;
+    } else {
+      const i = playerBattlefield.indexOf(card);
+      if (i !== -1) playerBattlefield[i] = null;
+    }
+  });
+  const claimSeal = vi.fn(() => Promise.resolve());
+
+  const seals = Array.from({ length: 7 }, (_, i) => ({
+    index: i,
+    champion: null as CardEntity | null,
+    alignment: Alignment.NEUTRAL as Alignment,
+    mesh: { position: { x: 0, y: 0, z: 0 } },
+  }));
+
+  const state = {
+    playerAlignment: Alignment.LIGHT,
+    currentRound: 1,
+    currentPhase: Phase.RESOLUTION,
+    playerScore: 0,
+    enemyScore: 0,
+    playerDeckCount: 0,
+    enemyDeckCount: 0,
+    playerGraveyardCount: 0,
+    enemyGraveyardCount: 0,
+    instructionText: '',
+    phaseStep: '',
+    powerPool: 0,
+    weaknessPool: 0,
+    logs: [] as string[],
+    playerLimboCards: [],
+    enemyLimboCards: [],
+    playerGraveyardCards: [],
+    enemyGraveyardCards: [],
+    playerDeckCards: [],
+    enemyDeckCards: [],
+  };
+
+  const updateState = vi.fn((patch: Partial<typeof state>) => {
+    Object.assign(state, patch);
+    if (patch.decisionContext === 'LUST_SEAL_INFLUENCE') {
+      setTimeout(() => {
+        const cb = (mock as any).alignmentChoiceCallback;
+        if (cb) cb(chosenAlignment);
+      }, 0);
+    }
+  });
+
+  const mock = {
+    state,
+    playerBattlefield,
+    enemyBattlefield,
+    playerHand: [] as CardEntity[],
+    playerLimbo: [] as CardEntity[],
+    enemyLimbo: [] as CardEntity[],
+    playerGraveyard: [] as CardEntity[],
+    enemyGraveyard: [] as CardEntity[],
+    playerDeck: [] as CardData[],
+    enemyDeck: [] as CardData[],
+    seals,
+    playerLimboMesh: { position: { x: 0, y: 0, z: 0 } },
+    enemyLimboMesh: { position: { x: 0, y: 0, z: 0 } },
+    playerGraveyardMesh: { position: { x: 0, y: 0, z: 0 } },
+    enemyGraveyardMesh: { position: { x: 0, y: 0, z: 0 } },
+    sceneManager: { scene: {}, camera: { position: {} }, cameraTarget: {} },
+    entityManager: { add: vi.fn(), remove: vi.fn() },
+    abilityManager: null as unknown as AbilityManager,
+    uiManager: {},
+    phaseManager: null as unknown as PhaseManager,
+    isProcessing: false,
+    currentResolvingSealIndex: 0,
+    cardsThatBattledThisRound: [] as CardEntity[],
+    resolutionCallback: null as (() => void) | null,
+    pendingAbilityData: null as unknown,
+    nullifyCallback: null as ((c: boolean) => void) | null,
+    sealSelectionCallback: null as ((idx: number) => void) | null,
+    updateState,
+    addLog,
+    destroyCard,
+    allocateCounters: vi.fn(() => Promise.resolve()),
+    handleTargetedAbility: vi.fn(() => Promise.resolve()),
+    executeGlobalAbility: vi.fn(() => Promise.resolve()),
+    handleSealTargetAbility: vi.fn(() => Promise.resolve()),
+    claimSeal,
+    disposeCard: vi.fn(),
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    handleBattle: vi.fn(() => Promise.resolve(false)),
+    handleSiege: vi.fn(() => Promise.resolve()),
+    ascendToSeal: vi.fn(),
+    checkGameOver: vi.fn(),
+    startPrep: vi.fn(),
+    endPrep: vi.fn(),
+    startResolution: vi.fn(() => Promise.resolve()),
+    resolveSeal: vi.fn(() => Promise.resolve()),
+    forceSkip: vi.fn(),
+    selectLimboCardForAbility: vi.fn(),
+    isImmuneToAbilities: vi.fn(),
+    isProtected: () => false,
+  };
+
+  mock.abilityManager = new AbilityManager(mock as IGameController);
+  mock.phaseManager = new PhaseManager(mock as IGameController);
+  mock.isImmuneToAbilities = (target: CardEntity, source: CardEntity) =>
+    mock.abilityManager.isImmuneToAbilities(target, source);
+
+  return mock as ReturnType<typeof createMockControllerForLust>;
+}
+
+describe('Lust – seal influence', () => {
+  it('happy path: player Lust and opponent at same seal, no champion – both sacrificed and claimSeal called with chosen alignment (Dark)', async () => {
+    const mock = createMockControllerForLust(Alignment.DARK);
+    mock.state.currentPhase = Phase.RESOLUTION;
+    const lust = createMockCard({
+      name: 'Lust',
+      power: 2,
+      hasLustSealEffect: true,
+      isEnemy: false,
+      faceUp: false,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const opponent = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: false,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = lust;
+    mock.enemyBattlefield[0] = opponent;
+    mock.seals[0].champion = null;
+    mock.seals[0].alignment = Alignment.NEUTRAL;
+
+    await mock.phaseManager.resolveSeal(0);
+
+    expect(mock.destroyCard).toHaveBeenCalledTimes(2);
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Lust' }) }),
+      false,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Lust', cause: 'ability' })
+    );
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Herald' }) }),
+      true,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Lust', cause: 'ability' })
+    );
+    expect(mock.updateState).toHaveBeenCalledWith(
+      expect.objectContaining({ decisionContext: 'LUST_SEAL_INFLUENCE', sealIndexForChoice: 0 })
+    );
+    expect(mock.claimSeal).toHaveBeenCalledWith(
+      0,
+      Alignment.DARK,
+      expect.objectContaining({ type: 'ability', cardName: 'Lust' })
+    );
+  });
+
+  it('edge case: seal has champion – Lust sacrifices both but does not offer seal influence', async () => {
+    const mock = createMockControllerForLust(Alignment.DARK);
+    mock.state.currentPhase = Phase.RESOLUTION;
+    const lust = createMockCard({
+      name: 'Lust',
+      power: 2,
+      hasLustSealEffect: true,
+      isEnemy: false,
+      faceUp: false,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const opponent = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: true,
+      faceUp: false,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const champion = createMockCard({
+      name: 'Prophet',
+      power: 9,
+      isChampion: true,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = lust;
+    mock.enemyBattlefield[0] = opponent;
+    mock.seals[0].champion = champion;
+    mock.seals[0].alignment = Alignment.LIGHT;
+
+    await mock.phaseManager.resolveSeal(0);
+
+    expect(mock.destroyCard).toHaveBeenCalledTimes(2);
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Lust' }) }),
+      false,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Lust', cause: 'ability' })
+    );
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Herald' }) }),
+      true,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Lust', cause: 'ability' })
+    );
+    expect(mock.claimSeal).not.toHaveBeenCalled();
+    expect(mock.updateState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ decisionContext: 'LUST_SEAL_INFLUENCE' })
+    );
   });
 });

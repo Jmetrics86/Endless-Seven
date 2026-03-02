@@ -2,6 +2,8 @@
   "name": "endless-seven",
   "private": true,
   "version": "0.0.0",
+  "description": "Endless Seven — Strategic card game. Choose Light or Darkness, command the Seals.",
+  "author": "Endless Seven",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -13,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "electron:dev": "concurrently -k \"vite --port=3000\" \"wait-on http://localhost:3000 && cross-env ELECTRON_DEV=1 electron .\"",
-    "electron:build": "node scripts/electron-build.cjs"
+    "electron:build": "node scripts/electron-build.cjs",
+    "build:exe": "node scripts/electron-build.cjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

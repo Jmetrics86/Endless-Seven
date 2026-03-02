@@ -385,7 +385,7 @@ export class PhaseManager {
         if (opponent && !this.controller.abilityManager.isImmuneToAbilities(opponent, current)) {
           this.controller.addLog(`${current.data.name} forces mutual sacrifice with ${opponent.data.name}`);
           this.controller.destroyCard(current, side === 'enemy', idx, false, { cardName: 'Lust', cause: 'ability' });
-          this.controller.destroyCard(opponent, side === 'player' ? false : true, idx, false, { cardName: 'Lust', cause: 'ability' });
+          this.controller.destroyCard(opponent, side === 'player', idx, false, { cardName: 'Lust', cause: 'ability' });
           // Effect: After sacrifice, if the Seal has no Champion, you may change the Influence of the seal
           const seal = this.controller.seals[idx];
           if (current.data.hasLustSealEffect && !seal.champion) {

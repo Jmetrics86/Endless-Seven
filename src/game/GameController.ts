@@ -597,9 +597,11 @@ export class GameController implements IGameController {
     }
 
     // Prophet: Passive: Prevents Purified Seals from being Corrupted while in play.
+    // Exception: Lust's explicit player choice to corrupt is allowed (Lust's "influence seal dark" option).
     if (status === Alignment.DARK) {
       const hasProphet = [...this.playerBattlefield, ...this.seals.map(s => s.champion)].some(c => c && c.data.name === "Prophet");
-      if (hasProphet && this.seals[idx].alignment === Alignment.LIGHT) return;
+      const isLustChoice = cause?.cardName === 'Lust';
+      if (hasProphet && this.seals[idx].alignment === Alignment.LIGHT && !isLustChoice) return;
     }
 
     const previousAlignment = this.seals[idx].alignment;
