@@ -12,6 +12,8 @@ import { CardEntity } from '../entities/CardEntity';
 import { SealEntity } from '../entities/SealEntity';
 import { Alignment, Phase, CardData, GameState, HoveredCardInfo } from '../types';
 import { LIGHT_POOL, DARK_POOL, GAME_CONSTANTS } from '../constants';
+import type { EnvironmentTheme } from '../theme';
+import { ENV_THEME_COLORS } from '../theme';
 import { CARD_ART_PATHS, CARD_BACK_PATH, cardArtUrl } from '../cardArtPaths';
 import { UIManager } from './UIManager';
 import { AbilityManager } from './AbilityManager';
@@ -44,6 +46,7 @@ export class GameController implements IGameController {
   public playerGraveyardMesh!: THREE.Group;
   public enemyGraveyardMesh!: THREE.Group;
   private slotMeshes: THREE.Mesh[] = [];
+  private floorMesh!: THREE.Mesh;
   /** Materials for deck pile layers only (card back texture when loaded). */
   private pileCardBackMaterials: THREE.MeshBasicMaterial[] = [];
   /** Meshes used for zone hover detection (Limbo/Graveyard base planes). */
@@ -126,13 +129,14 @@ export class GameController implements IGameController {
     }
 
     // Floor
-    const floor = new THREE.Mesh(
+    const colors = ENV_THEME_COLORS.dark;
+    this.floorMesh = new THREE.Mesh(
       new THREE.PlaneGeometry(GAME_CONSTANTS.TABLE_SIZE, GAME_CONSTANTS.TABLE_SIZE),
-      new THREE.MeshPhongMaterial({ color: 0x08080c, shininess: 20 })
+      new THREE.MeshPhongMaterial({ color: colors.floor, shininess: 20 })
     );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    this.sceneManager.scene.add(floor);
+    this.floorMesh.rotation.x = -Math.PI / 2;
+    this.floorMesh.receiveShadow = true;
+    this.sceneManager.scene.add(this.floorMesh);
 
     this.setupPiles();
   }
@@ -183,10 +187,11 @@ export class GameController implements IGameController {
   }
 
   private createPile(type: 'DECK' | 'LIMBO' | 'GRAVE', labelColor: number, labelOffsetZ?: number): THREE.Group {
+    const colors = ENV_THEME_COLORS.dark;
     const group = new THREE.Group();
     const base = new THREE.Mesh(
       new THREE.BoxGeometry(GAME_CONSTANTS.CARD_W + 0.3, 0.1, GAME_CONSTANTS.CARD_H + 0.3),
-      new THREE.MeshPhongMaterial({ color: 0x000000, transparent: true, opacity: 0.7 })
+      new THREE.MeshPhongMaterial({ color: colors.pileBase, transparent: true, opacity: colors.pileBaseOpacity })
     );
     group.add(base);
 
@@ -194,7 +199,7 @@ export class GameController implements IGameController {
     if (isDeck) {
       for (let i = 0; i < 6; i++) {
         const mat = new THREE.MeshBasicMaterial({
-          color: 0x1a1a1a,
+          color: colors.pileDeckLayer,
           transparent: true,
           side: THREE.DoubleSide
         });
@@ -246,15 +251,55 @@ export class GameController implements IGameController {
   }
 
   private createGridSlot(x: number, z: number) {
+    const colors = ENV_THEME_COLORS.dark;
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W + 0.4, GAME_CONSTANTS.CARD_H + 0.4),
-      new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.2, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: colors.slotFill, transparent: true, opacity: colors.slotOpacity, side: THREE.DoubleSide })
     );
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(x, 0.06, z);
     mesh.userData = { isSlot: true, slotIndex: Math.round((x - (-(GAME_CONSTANTS.SEVEN - 1) * GAME_CONSTANTS.SLOT_SPACING / 2)) / GAME_CONSTANTS.SLOT_SPACING) };
     this.sceneManager.scene.add(mesh);
     this.slotMeshes.push(mesh);
+  }
+
+  /** Switch 3D environment theme (dark/light) for accessibility. */
+  public setEnvironmentTheme(theme: EnvironmentTheme) {
+    const colors = ENV_THEME_COLORS[theme];
+    this.sceneManager.setTheme(theme);
+
+    (this.floorMesh.material as THREE.MeshPhongMaterial).color.setHex(colors.floor);
+
+    for (const slot of this.slotMeshes) {
+      const mat = slot.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(colors.slotFill);
+      mat.opacity = colors.slotOpacity;
+    }
+
+    for (const seal of this.seals) {
+      seal.setTheme(theme);
+    }
+
+    const pileGroups = [
+      this.playerDeckMesh,
+      this.enemyDeckMesh,
+      this.playerLimboMesh,
+      this.enemyLimboMesh,
+      this.playerGraveyardMesh,
+      this.enemyGraveyardMesh,
+    ];
+    for (const group of pileGroups) {
+      const base = group.children[0] as THREE.Mesh;
+      if (base?.isMesh && base.material) {
+        const mat = base.material as THREE.MeshPhongMaterial;
+        mat.color.setHex(colors.pileBase);
+        mat.opacity = colors.pileBaseOpacity;
+      }
+    }
+
+    for (const mat of this.pileCardBackMaterials) {
+      mat.color.setHex(mat.map ? 0xffffff : colors.pileDeckLayer);
+    }
   }
 
   public selectAlignment(side: Alignment) {

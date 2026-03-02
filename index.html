@@ -3,9 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Endless Seven — Choose your side. Seal the heartbeat of the world.</title>
+    <meta name="description" content="Endless Seven is a strategic card game. Command Celestials and Lycans for Light, or Daemons and Vampyres for Darkness. Purify or corrupt the Seven Seals to decide the fate of the world." />
+    <meta name="author" content="Endless Seven" />
+    <meta name="theme-color" content="#1e293b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Endless Seven" />
+    <meta property="og:description" content="Strategic card game. Choose Light or Darkness, command the Seals, and decide the fate of the world." />
+    <meta property="og:locale" content="en_US" />
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Endless Seven" />
+    <meta name="twitter:description" content="Strategic card game. Choose Light or Darkness, command the Seals, and decide the fate of the world." />
   </head>
   <body>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('endless-seven-environment-theme');
+          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        } catch (e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { Alignment } from '../types';
 import { CardEntity } from './CardEntity';
 import { GameEntity } from '../engine/EntityManager';
+import type { EnvironmentTheme } from '../theme';
+import { ENV_THEME_COLORS } from '../theme';
 
 export class SealEntity implements GameEntity {
   public mesh: THREE.Mesh;
@@ -14,19 +16,31 @@ export class SealEntity implements GameEntity {
   public alignment: Alignment;
   public champion: CardEntity | null = null;
   public index: number;
+  private _theme: EnvironmentTheme = 'dark';
 
   constructor(x: number, index: number) {
     this.index = index;
     this.alignment = Alignment.NEUTRAL;
-
+    const colors = ENV_THEME_COLORS.dark;
     this.mesh = new THREE.Mesh(
       new THREE.CylinderGeometry(1.2, 1.25, 0.25, 6),
-      new THREE.MeshPhongMaterial({ color: 0x222222, emissive: 0x080808 })
+      new THREE.MeshPhongMaterial({ color: colors.sealBase, emissive: colors.sealEmissive })
     );
     this.mesh.position.set(x, 0.1, 0);
 
     this.light = new THREE.PointLight(0xffffff, 0, 12);
     this.light.position.set(x, 2, 0);
+  }
+
+  /** Update seal base appearance for environment theme (neutral state). */
+  public setTheme(theme: EnvironmentTheme) {
+    this._theme = theme;
+    const colors = ENV_THEME_COLORS[theme];
+    const material = this.mesh.material as THREE.MeshPhongMaterial;
+    material.color.setHex(colors.sealBase);
+    if (this.alignment === Alignment.NEUTRAL) {
+      material.emissive.setHex(colors.sealEmissive);
+    }
   }
 
   public setAlignment(status: Alignment) {

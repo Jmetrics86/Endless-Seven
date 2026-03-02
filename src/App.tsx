@@ -9,6 +9,18 @@ import { GameController } from './game/GameController';
 import { GAME_VERSION } from './constants';
 import { Alignment, Phase, GameState, HoveredCardInfo } from './types';
 import { cardArtUrl } from './cardArtPaths';
+import type { EnvironmentTheme } from './theme';
+import { THEME_STORAGE_KEY } from './theme';
+
+function loadStoredTheme(): EnvironmentTheme {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark') return stored;
+  } catch {
+    /* ignore */
+  }
+  return 'dark';
+}
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -16,6 +28,7 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [showSelection, setShowSelection] = useState(true);
   const [zoneSearchModal, setZoneSearchModal] = useState<'limbo' | 'graveyard' | 'deck' | null>(null);
+  const [environmentTheme, setEnvironmentTheme] = useState<EnvironmentTheme>(loadStoredTheme);
 
   useEffect(() => {
     if (containerRef.current && !gameRef.current) {
@@ -28,6 +41,23 @@ export default function App() {
       gameRef.current?.dispose();
     };
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = environmentTheme;
+    gameRef.current?.setEnvironmentTheme(environmentTheme);
+  }, [environmentTheme]);
+
+  const toggleEnvironmentTheme = () => {
+    setEnvironmentTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const handleSelectAlignment = (side: Alignment) => {
     setShowSelection(false);
@@ -62,6 +92,19 @@ export default function App() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden font-cinzel">
+      {/* Environment theme toggle (accessibility) — bottom-left for less clutter */}
+      <button
+        type="button"
+        onClick={toggleEnvironmentTheme}
+        className="fixed bottom-4 left-4 z-[100] p-2 rounded-lg glass-panel border border-white/20 hover:border-[#00f2ff]/60 transition-all pointer-events-auto focus:outline-none focus:ring-2 focus:ring-[#00f2ff]/60"
+        title={environmentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-label={environmentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        <span className="text-xl" aria-hidden>
+          {environmentTheme === 'dark' ? '☀' : '☽'}
+        </span>
+      </button>
+
       {/* Three.js Container */}
       <div ref={containerRef} className="absolute inset-0 z-0" />
 
@@ -120,7 +163,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-[#050508] text-white"
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center env-bg text-white"
           >
             <h1 className="text-5xl tracking-[10px] mb-4">ENDLESS SEVEN</h1>
             <p className="text-gray-500 italic mb-12">"Choose your side. Seal the heartbeat of the world."</p>

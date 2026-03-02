@@ -6,34 +6,90 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
 
+/* Dark mode: slate gray + deep red */
 body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: #0a0a0f;
-  color: #e0e0e0;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+html[data-theme="light"] body {
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 .hud-gradient-top {
-  background: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.7), transparent);
+  background: linear-gradient(to bottom, rgba(30,41,59,0.97), rgba(30,41,59,0.85), transparent);
+}
+
+html[data-theme="light"] .hud-gradient-top {
+  background: linear-gradient(to bottom, rgba(248,250,252,0.97), rgba(248,250,252,0.85), transparent);
 }
 
 .hud-gradient-bottom {
-  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  background: linear-gradient(to top, rgba(30,41,59,0.95), transparent);
+}
+
+html[data-theme="light"] .hud-gradient-bottom {
+  background: linear-gradient(to top, rgba(248,250,252,0.95), transparent);
 }
 
 .glass-panel {
-  background: rgba(255,255,255,0.05);
+  background: rgba(51,65,85,0.6);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(148,163,184,0.25);
 }
 
+html[data-theme="light"] .glass-panel {
+  background: rgba(255,255,255,0.85);
+  border: 1px solid rgba(59,130,246,0.2);
+}
+
+/* Light alignment: cyan/blue accent. Dark alignment: deep red accent */
 .light-glow {
   box-shadow: 0 0 15px rgba(0, 242, 255, 0.4);
   border-color: #00f2ff;
 }
 
 .dark-glow {
-  box-shadow: 0 0 15px rgba(255, 0, 68, 0.4);
-  border-color: #ff0044;
+  box-shadow: 0 0 15px rgba(185, 28, 28, 0.5);
+  border-color: #b91c1c;
+}
+
+html[data-theme="light"] .light-glow {
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+  border-color: #3b82f6;
+}
+
+html[data-theme="light"] .dark-glow {
+  box-shadow: 0 0 15px rgba(185, 28, 28, 0.35);
+  border-color: #b91c1c;
+}
+
+/* Selection overlay (choose alignment) */
+.env-bg {
+  background: #1e293b;
+}
+
+html[data-theme="light"] .env-bg {
+  background: #f8fafc;
+}
+
+/* Light mode: white + blues — ensure UI text remains readable */
+html[data-theme="light"] .text-white {
+  color: #0f172a;
+}
+html[data-theme="light"] .text-gray-300 {
+  color: #334155;
+}
+html[data-theme="light"] .text-gray-400 {
+  color: #475569;
+}
+html[data-theme="light"] .text-gray-500 {
+  color: #64748b;
+}
+html[data-theme="light"] .text-gray-200 {
+  color: #1e293b;
 }

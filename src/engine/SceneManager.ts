@@ -4,17 +4,21 @@
  */
 
 import * as THREE from 'three';
+import type { EnvironmentTheme } from '../theme';
+import { ENV_THEME_COLORS } from '../theme';
 
 export class SceneManager {
   public scene: THREE.Scene;
   public camera: THREE.PerspectiveCamera;
   public renderer: THREE.WebGLRenderer;
   public cameraTarget: THREE.Vector3;
+  private _theme: EnvironmentTheme = 'dark';
 
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x050508);
-    this.scene.fog = new THREE.FogExp2(0x050508, 0.015);
+    const colors = ENV_THEME_COLORS.dark;
+    this.scene.background = new THREE.Color(colors.sceneBg);
+    this.scene.fog = new THREE.FogExp2(colors.sceneFog, 0.015);
 
     this.cameraTarget = new THREE.Vector3(0, 0, -2);
     this.camera = new THREE.PerspectiveCamera(
@@ -65,6 +69,14 @@ export class SceneManager {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  /** Switch environment theme (dark/light) for accessibility. */
+  public setTheme(theme: EnvironmentTheme) {
+    this._theme = theme;
+    const colors = ENV_THEME_COLORS[theme];
+    this.scene.background.setHex(colors.sceneBg);
+    (this.scene.fog as THREE.FogExp2).color.setHex(colors.sceneFog);
   }
 
   public update() {
