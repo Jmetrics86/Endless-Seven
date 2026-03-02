@@ -323,7 +323,10 @@ export class PhaseManager {
           if (validSeals.length > 0) {
             const preferred = validSeals.find(s => s.alignment !== targetAlign) || validSeals[0];
             this.controller.addLog(`${current.data.name} changes the influence of Seal ${preferred.index + 1}`);
-            await this.controller.claimSeal(preferred.index, targetAlign);
+            await this.controller.claimSeal(preferred.index, targetAlign, {
+              type: 'ability',
+              cardName: current.data.name
+            });
           } else {
             this.controller.addLog(`${current.data.name} finds no valid Seals to affect`);
           }
@@ -342,7 +345,10 @@ export class PhaseManager {
               const seal = this.controller.seals[targetIdx];
               if (!seal.champion) {
                 this.controller.addLog(`${current.data.name} changes the influence of Seal ${targetIdx + 1}`);
-                await this.controller.claimSeal(targetIdx, targetAlign);
+                await this.controller.claimSeal(targetIdx, targetAlign, {
+                  type: 'ability',
+                  cardName: current.data.name
+                });
               } else {
                 this.controller.addLog(`Thrones cannot change a Seal that already has a Champion.`);
               }
@@ -388,7 +394,10 @@ export class PhaseManager {
               if (validSeals.length > 0) {
                 const align = Math.random() < 0.5 ? Alignment.LIGHT : Alignment.DARK;
                 this.controller.addLog(`Lust's effect: Seal ${idx + 1} influence changed.`);
-                await this.controller.claimSeal(idx, align);
+                await this.controller.claimSeal(idx, align, {
+                  type: 'ability',
+                  cardName: current.data.name
+                });
               }
             } else {
               const hasValid = this.controller.seals[idx] && !this.controller.seals[idx].champion;
@@ -405,7 +414,10 @@ export class PhaseManager {
                 });
                 this.controller.updateState({ decisionContext: undefined, sealIndexForChoice: undefined });
                 this.controller.addLog(`Lust's effect: Seal ${idx + 1} influence changed.`);
-                await this.controller.claimSeal(idx, chosenAlign);
+                await this.controller.claimSeal(idx, chosenAlign, {
+                  type: 'ability',
+                  cardName: current.data.name
+                });
               }
             }
           }
@@ -829,7 +841,10 @@ export class PhaseManager {
       const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
       const targetAlign = isPlayer ? pAlign : eAlign;
       this.controller.addLog(`${isPlayer ? 'Player' : 'Enemy'} influences Seal ${idx + 1} towards ${targetAlign}`);
-      await this.controller.claimSeal(idx, targetAlign);
+      await this.controller.claimSeal(idx, targetAlign, {
+        type: 'combat',
+        cardName: attacker!.data.name
+      });
     }
   }
 

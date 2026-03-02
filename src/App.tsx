@@ -382,18 +382,30 @@ export default function App() {
             </div>
             <div className="flex gap-4 mt-1">
               <button
-                onClick={() => {
-                  (gameRef.current as any).alignmentChoiceCallback?.(Alignment.LIGHT);
-                  (gameRef.current as any).alignmentChoiceCallback = null;
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const cb = (gameRef.current as any)?.alignmentChoiceCallback;
+                  if (cb) {
+                    (gameRef.current as any).alignmentChoiceCallback = null;
+                    cb(Alignment.LIGHT);
+                  }
                 }}
                 className="px-5 py-2 bg-amber-500/20 border border-amber-400 text-amber-300 hover:bg-amber-500/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
               >
                 Light
               </button>
               <button
-                onClick={() => {
-                  (gameRef.current as any).alignmentChoiceCallback?.(Alignment.DARK);
-                  (gameRef.current as any).alignmentChoiceCallback = null;
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const cb = (gameRef.current as any)?.alignmentChoiceCallback;
+                  if (cb) {
+                    (gameRef.current as any).alignmentChoiceCallback = null;
+                    cb(Alignment.DARK);
+                  }
                 }}
                 className="px-5 py-2 bg-purple-600/20 border border-purple-400 text-purple-300 hover:bg-purple-600/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
               >

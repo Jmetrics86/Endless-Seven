@@ -72,7 +72,10 @@ export class AbilityManager {
       source.updateVisualMarkers();
     } else if (effect === 'corrupt_undefended') {
       for (const s of this.controller.seals.filter(s => !s.champion && s.alignment === Alignment.LIGHT)) {
-        await this.controller.claimSeal(s.index, Alignment.DARK);
+        await this.controller.claimSeal(s.index, Alignment.DARK, {
+          type: 'ability',
+          cardName: source.data.name
+        });
       }
     } else if (effect === 'siphon_power_only') {
       const allCards = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && c !== source && (c as CardEntity).data.faceUp) as CardEntity[];
@@ -437,8 +440,10 @@ export class AbilityManager {
       });
 
       if (targetIdx !== -1) {
-        await this.controller.claimSeal(targetIdx, Alignment.LIGHT);
-        this.controller.addLog(`Martyr Purifies Seal ${targetIdx + 1}`);
+        await this.controller.claimSeal(targetIdx, Alignment.LIGHT, {
+          type: 'ability',
+          cardName: card.data.name
+        });
         this.moveToGraveyard(card);
       } else {
         this.controller.updateState({ currentPhase: Phase.PREP });
@@ -761,7 +766,10 @@ export class AbilityManager {
       const targetAlign = effect === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
       let validSeals = this.controller.seals.filter(s => !s.champion && (s.alignment === targetAlign || s.alignment === Alignment.NEUTRAL));
       if (corruptOnly && effect === Alignment.LIGHT) validSeals = validSeals.filter(s => s.alignment === Alignment.DARK);
-      if (validSeals.length > 0 && effect) await this.controller.claimSeal(validSeals[0].index, effect);
+      if (validSeals.length > 0 && effect) await this.controller.claimSeal(validSeals[0].index, effect, {
+        type: 'ability',
+        cardName: source.data.name
+      });
       return Promise.resolve();
     } else {
       this.controller.updateState({

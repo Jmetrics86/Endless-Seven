@@ -500,7 +500,7 @@ export class GameController implements IGameController {
     // Martyr: Limbo Trigger: Purify one Neutral Seal without a Champion.
     if (card.data.name === "Martyr") {
       const target = this.seals.find(s => s.alignment === Alignment.NEUTRAL && !s.champion);
-      if (target) this.claimSeal(target.index, Alignment.LIGHT);
+      if (target) this.claimSeal(target.index, Alignment.LIGHT, { type: 'ability', cardName: 'Martyr' });
     }
 
     gsap.to(card.mesh.position, {
@@ -513,7 +513,11 @@ export class GameController implements IGameController {
     gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.8 });
   }
 
-  public async claimSeal(idx: number, status: Alignment): Promise<void> {
+  public async claimSeal(
+    idx: number,
+    status: Alignment,
+    cause?: { type: 'combat' | 'ability'; cardName: string }
+  ): Promise<void> {
     if (this.state.lockedSealIndex === idx) {
       this.addLog(`Seal ${idx + 1} is locked and cannot be changed.`);
       return;
@@ -553,6 +557,12 @@ export class GameController implements IGameController {
       if (hasProphet && this.seals[idx].alignment === Alignment.LIGHT) return;
     }
 
+    const previousAlignment = this.seals[idx].alignment;
+    const willChange = previousAlignment !== status;
+    if (willChange && (status === Alignment.LIGHT || status === Alignment.DARK) && cause) {
+      const verb = status === Alignment.LIGHT ? 'Purified' : 'Corrupted';
+      this.addLog(`Seal ${idx + 1} ${verb} by ${cause.type} (card: ${cause.cardName}).`);
+    }
     this.seals[idx].setAlignment(status);
     this.updateGlobalScores();
   }
@@ -760,6 +770,13 @@ export class GameController implements IGameController {
         allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp && c.data.isChampion) as CardEntity[];
       } else {
         allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp) as CardEntity[];
+        // Include cards at the current seal that were just revealed (not yet faceUp) so they can be targeted (e.g. Famine destroying Herald)
+        if (this.currentResolvingSealIndex >= 0 && this.currentResolvingSealIndex < this.playerBattlefield.length) {
+          const p = this.playerBattlefield[this.currentResolvingSealIndex];
+          const e = this.enemyBattlefield[this.currentResolvingSealIndex];
+          if (p && !allBoard.includes(p)) allBoard = [...allBoard, p];
+          if (e && !allBoard.includes(e)) allBoard = [...allBoard, e];
+        }
       }
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
@@ -798,7 +815,10 @@ export class GameController implements IGameController {
               this.addLog("The Almighty can only Purify a Corrupted (Dark) Seal.");
               return;
             }
-            await this.claimSeal(seal.index, this.pendingAbilityData.effect);
+            await this.claimSeal(seal.index, this.pendingAbilityData.effect, {
+              type: 'ability',
+              cardName: this.pendingAbilityData.source.data.name
+            });
             const phaseAfterClaim = this.state.currentPhase as Phase;
             if (phaseAfterClaim !== Phase.GAME_OVER) {
               this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
