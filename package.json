@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "electron:dev": "concurrently -k \"vite --port=3000\" \"wait-on http://localhost:3000 && cross-env ELECTRON_DEV=1 electron .\"",
     "electron:build": "node scripts/electron-build.cjs"
   },
@@ -41,7 +43,8 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "wait-on": "^8.0.1"
+    "wait-on": "^8.0.1",
+    "vitest": "^3.2.4"
   },
   "build": {
     "appId": "com.endless-seven.app",

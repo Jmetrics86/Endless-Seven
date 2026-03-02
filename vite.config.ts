@@ -9,6 +9,11 @@ export default defineConfig(({mode}) => {
   return {
     base: forElectron ? './' : '/',
     plugins: [react(), tailwindcss()],
+    test: {
+      globals: true,
+      environment: 'node',
+      include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    },
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },

@@ -1,0 +1,676 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Unit tests for happy-path card interactions: combat, abilities, and immunity.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Alignment, Phase } from '../../types';
+import type { CardData } from '../../types';
+import { AbilityManager } from '../AbilityManager';
+import { PhaseManager } from '../PhaseManager';
+import type { CardEntity } from '../../entities/CardEntity';
+import type { IGameController } from '../interfaces';
+
+// Mock gsap so abilities that use gsap.to(..., onComplete) don't require real animations
+vi.mock('gsap', () => ({
+  default: {
+    to: vi.fn((_target: unknown, _vars: { onComplete?: () => void }) => {
+      const vars = _vars as { onComplete?: () => void };
+      if (typeof vars?.onComplete === 'function') {
+        vars.onComplete();
+      }
+    }),
+  },
+}));
+
+/** Minimal card-like object for testing (no Three.js). */
+interface MockCardLike {
+  data: CardData & {
+    isEnemy: boolean;
+    faceUp: boolean;
+    powerMarkers: number;
+    weaknessMarkers: number;
+    isInvincible?: boolean;
+    isSuppressed?: boolean;
+    markedByWildWolf?: boolean;
+  };
+  updateVisualMarkers: () => void;
+  mesh: { position: { x: number; y: number; z: number } };
+}
+
+function createMockCard(
+  overrides: Partial<MockCardLike['data']> & { name: string; power: number }
+): MockCardLike {
+  const data: MockCardLike['data'] = {
+    name: 'Test',
+    faction: 'Daemon',
+    type: 'Creature',
+    power: 5,
+    isChampion: false,
+    ability: '',
+    isEnemy: false,
+    faceUp: true,
+    powerMarkers: 0,
+    weaknessMarkers: 0,
+    ...overrides,
+  };
+  return {
+    data,
+    updateVisualMarkers: vi.fn(),
+    mesh: { position: { x: 0, y: 0, z: 0 } },
+  };
+}
+
+/** Build a mock controller that mutates battlefields when destroyCard is called (for combat tests). */
+function createMockControllerForBattle(): IGameController & {
+  destroyCard: ReturnType<typeof vi.fn>;
+  addLog: ReturnType<typeof vi.fn>;
+  playerBattlefield: (CardEntity | null)[];
+  enemyBattlefield: (CardEntity | null)[];
+  cardsThatBattledThisRound: CardEntity[];
+} {
+  const playerBattlefield: (CardEntity | null)[] = Array(7).fill(null);
+  const enemyBattlefield: (CardEntity | null)[] = Array(7).fill(null);
+  const addLog = vi.fn();
+  const destroyCard = vi.fn((card: CardEntity, isEnemy: boolean, idx: number, _isChampion: boolean) => {
+    if (isEnemy) {
+      const i = enemyBattlefield.indexOf(card);
+      if (i !== -1) enemyBattlefield[i] = null;
+    } else {
+      const i = playerBattlefield.indexOf(card);
+      if (i !== -1) playerBattlefield[i] = null;
+    }
+  });
+
+  const seals = Array.from({ length: 7 }, (_, i) => ({
+    index: i,
+    champion: null as CardEntity | null,
+    alignment: Alignment.NEUTRAL as Alignment,
+    mesh: { position: { x: 0, y: 0, z: 0 } },
+  }));
+
+  const state = {
+    playerAlignment: Alignment.LIGHT,
+    currentRound: 1,
+    currentPhase: Phase.PREP,
+    playerScore: 0,
+    enemyScore: 0,
+    playerDeckCount: 0,
+    enemyDeckCount: 0,
+    playerGraveyardCount: 0,
+    enemyGraveyardCount: 0,
+    instructionText: '',
+    phaseStep: '',
+    powerPool: 0,
+    weaknessPool: 0,
+    logs: [] as string[],
+    playerLimboCards: [],
+    enemyLimboCards: [],
+    playerGraveyardCards: [],
+    enemyGraveyardCards: [],
+    playerDeckCards: [],
+    enemyDeckCards: [],
+  };
+
+  const mock = {
+    state,
+    playerBattlefield,
+    enemyBattlefield,
+    playerHand: [] as CardEntity[],
+    playerLimbo: [] as CardEntity[],
+    enemyLimbo: [] as CardEntity[],
+    playerGraveyard: [] as CardEntity[],
+    enemyGraveyard: [] as CardEntity[],
+    playerDeck: [] as CardData[],
+    enemyDeck: [] as CardData[],
+    seals,
+    playerLimboMesh: { position: { x: 0, y: 0, z: 0 } },
+    enemyLimboMesh: { position: { x: 0, y: 0, z: 0 } },
+    playerGraveyardMesh: { position: { x: 0, y: 0, z: 0 } },
+    enemyGraveyardMesh: { position: { x: 0, y: 0, z: 0 } },
+    sceneManager: { scene: {}, camera: { position: {} }, cameraTarget: {} },
+    entityManager: { add: vi.fn(), remove: vi.fn() },
+    abilityManager: null as unknown as AbilityManager,
+    uiManager: {},
+    phaseManager: null as unknown as PhaseManager,
+    isProcessing: false,
+    currentResolvingSealIndex: 0,
+    cardsThatBattledThisRound: [] as CardEntity[],
+    resolutionCallback: null as (() => void) | null,
+    pendingAbilityData: null as unknown,
+    nullifyCallback: null as ((c: boolean) => void) | null,
+    sealSelectionCallback: null as ((idx: number) => void) | null,
+    updateState: vi.fn((patch: Partial<typeof state>) => Object.assign(state, patch)),
+    addLog,
+    destroyCard,
+    allocateCounters: vi.fn(() => Promise.resolve()),
+    handleTargetedAbility: vi.fn(() => Promise.resolve()),
+    executeGlobalAbility: vi.fn(() => Promise.resolve()),
+    handleSealTargetAbility: vi.fn(() => Promise.resolve()),
+    claimSeal: vi.fn(() => Promise.resolve()),
+    disposeCard: vi.fn(),
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    handleBattle: vi.fn(),
+    handleSiege: vi.fn(() => Promise.resolve()),
+    ascendToSeal: vi.fn(),
+    checkGameOver: vi.fn(),
+    startPrep: vi.fn(),
+    endPrep: vi.fn(),
+    startResolution: vi.fn(() => Promise.resolve()),
+    resolveSeal: vi.fn(() => Promise.resolve()),
+    forceSkip: vi.fn(),
+    selectLimboCardForAbility: vi.fn(),
+    isImmuneToAbilities: vi.fn(),
+    isProtected: () => false,
+  };
+
+  mock.abilityManager = new AbilityManager(mock as IGameController);
+  mock.phaseManager = new PhaseManager(mock as IGameController);
+  mock.handleBattle = (a: CardEntity, d: CardEntity, idx: number, isChamp: boolean) =>
+    mock.phaseManager.handleBattle(a, d, idx, isChamp);
+  mock.isImmuneToAbilities = (target: CardEntity, source: CardEntity) =>
+    mock.abilityManager.isImmuneToAbilities(target, source);
+
+  return mock as ReturnType<typeof createMockControllerForBattle>;
+}
+
+/** Mock controller for ability-effect tests (destroy, return, place_power, etc.). */
+function createMockControllerForAbilities(): IGameController & {
+  destroyCard: ReturnType<typeof vi.fn>;
+  addLog: ReturnType<typeof vi.fn>;
+  playerBattlefield: (CardEntity | null)[];
+  enemyBattlefield: (CardEntity | null)[];
+  playerDeck: CardData[];
+  enemyDeck: CardData[];
+} {
+  const playerBattlefield: (CardEntity | null)[] = Array(7).fill(null);
+  const enemyBattlefield: (CardEntity | null)[] = Array(7).fill(null);
+  const playerDeck: CardData[] = [];
+  const enemyDeck: CardData[] = [];
+  const addLog = vi.fn();
+  const destroyCard = vi.fn((card: CardEntity, isEnemy: boolean, idx: number, _isChampion: boolean) => {
+    if (isEnemy) {
+      const i = enemyBattlefield.indexOf(card);
+      if (i !== -1) enemyBattlefield[i] = null;
+    } else {
+      const i = playerBattlefield.indexOf(card);
+      if (i !== -1) playerBattlefield[i] = null;
+    }
+  });
+
+  const seals = Array.from({ length: 7 }, (_, i) => ({
+    index: i,
+    champion: null as CardEntity | null,
+    alignment: Alignment.NEUTRAL as Alignment,
+    mesh: { position: { x: 0, y: 0, z: 0 } },
+  }));
+
+  const state = {
+    playerAlignment: Alignment.LIGHT,
+    currentRound: 1,
+    currentPhase: Phase.PREP,
+    playerScore: 0,
+    enemyScore: 0,
+    playerDeckCount: 0,
+    enemyDeckCount: 0,
+    playerGraveyardCount: 0,
+    enemyGraveyardCount: 0,
+    instructionText: '',
+    phaseStep: '',
+    powerPool: 0,
+    weaknessPool: 0,
+    logs: [] as string[],
+    playerLimboCards: [],
+    enemyLimboCards: [],
+    playerGraveyardCards: [],
+    enemyGraveyardCards: [],
+    playerDeckCards: [],
+    enemyDeckCards: [],
+  };
+
+  const mockAbilities = {
+    state,
+    playerBattlefield,
+    enemyBattlefield,
+    playerHand: [] as CardEntity[],
+    playerLimbo: [] as CardEntity[],
+    enemyLimbo: [] as CardEntity[],
+    playerGraveyard: [] as CardEntity[],
+    enemyGraveyard: [] as CardEntity[],
+    playerDeck,
+    enemyDeck,
+    seals,
+    playerLimboMesh: { position: { x: 0, y: 0, z: 0 } },
+    enemyLimboMesh: { position: { x: 0, y: 0, z: 0 } },
+    playerGraveyardMesh: { position: { x: 0, y: 0, z: 0 } },
+    enemyGraveyardMesh: { position: { x: 0, y: 0, z: 0 } },
+    sceneManager: { scene: {}, camera: { position: {} }, cameraTarget: {} },
+    entityManager: { add: vi.fn(), remove: vi.fn() },
+    abilityManager: null as unknown as AbilityManager,
+    uiManager: {},
+    phaseManager: {},
+    isProcessing: false,
+    currentResolvingSealIndex: 0,
+    cardsThatBattledThisRound: [] as CardEntity[],
+    resolutionCallback: null as (() => void) | null,
+    pendingAbilityData: null as unknown,
+    nullifyCallback: null as ((c: boolean) => void) | null,
+    sealSelectionCallback: null as ((idx: number) => void) | null,
+    updateState: vi.fn((patch: Partial<typeof state>) => Object.assign(state, patch)),
+    addLog,
+    destroyCard,
+    allocateCounters: vi.fn(() => Promise.resolve()),
+    handleTargetedAbility: vi.fn(() => Promise.resolve()),
+    executeGlobalAbility: vi.fn(() => Promise.resolve()),
+    handleSealTargetAbility: vi.fn(() => Promise.resolve()),
+    claimSeal: vi.fn(() => Promise.resolve()),
+    disposeCard: vi.fn(),
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    handleBattle: vi.fn(() => Promise.resolve(false)),
+    handleSiege: vi.fn(() => Promise.resolve()),
+    ascendToSeal: vi.fn(),
+    checkGameOver: vi.fn(),
+    startPrep: vi.fn(),
+    endPrep: vi.fn(),
+    startResolution: vi.fn(() => Promise.resolve()),
+    resolveSeal: vi.fn(() => Promise.resolve()),
+    forceSkip: vi.fn(),
+    selectLimboCardForAbility: vi.fn(),
+    isImmuneToAbilities: vi.fn(),
+    isProtected: () => false,
+  };
+
+  mockAbilities.abilityManager = new AbilityManager(mockAbilities as IGameController);
+  mockAbilities.isImmuneToAbilities = (target: CardEntity, source: CardEntity) =>
+    mockAbilities.abilityManager.isImmuneToAbilities(target, source);
+
+  return mockAbilities as ReturnType<typeof createMockControllerForAbilities>;
+}
+
+describe('Combat – card vs card', () => {
+  let mock: ReturnType<typeof createMockControllerForBattle>;
+
+  beforeEach(() => {
+    mock = createMockControllerForBattle();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.cardsThatBattledThisRound = [];
+    vi.clearAllMocks();
+  });
+
+  it('higher power attacker wins: defender is destroyed, attacker survives', async () => {
+    const attacker = createMockCard({ name: 'Alpha', power: 7, powerMarkers: 0, weaknessMarkers: 0, isEnemy: false }) as unknown as CardEntity;
+    const defender = createMockCard({ name: 'Noble', power: 4, powerMarkers: 0, weaknessMarkers: 0, isEnemy: true }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = attacker;
+    mock.enemyBattlefield[0] = defender;
+
+    const stymied = await mock.phaseManager.handleBattle(attacker, defender, 0, false);
+
+    expect(stymied).toBe(false);
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      defender,
+      true,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Alpha', cause: 'combat' })
+    );
+    expect(mock.playerBattlefield[0]).toBe(attacker);
+    expect(mock.enemyBattlefield[0]).toBeNull();
+  });
+
+  it('higher power defender wins: attacker is destroyed, defender survives', async () => {
+    const attacker = createMockCard({ name: 'Noble', power: 4, isEnemy: false }) as unknown as CardEntity;
+    const defender = createMockCard({ name: 'War', power: 9, isEnemy: true }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = attacker;
+    mock.enemyBattlefield[0] = defender;
+
+    const stymied = await mock.phaseManager.handleBattle(attacker, defender, 0, false);
+
+    expect(stymied).toBe(false);
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      attacker,
+      false,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'War', cause: 'combat' })
+    );
+    expect(mock.enemyBattlefield[0]).toBe(defender);
+    expect(mock.playerBattlefield[0]).toBeNull();
+  });
+
+  it('equal power: mutual destruction (both destroyed)', async () => {
+    const attacker = createMockCard({ name: 'Pride', power: 6, isEnemy: false }) as unknown as CardEntity;
+    const defender = createMockCard({ name: 'Duke', power: 6, isEnemy: true }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = attacker;
+    mock.enemyBattlefield[0] = defender;
+
+    const stymied = await mock.phaseManager.handleBattle(attacker, defender, 0, false);
+
+    expect(stymied).toBe(false);
+    expect(mock.destroyCard).toHaveBeenCalledWith(attacker, false, 0, false, expect.any(Object));
+    expect(mock.destroyCard).toHaveBeenCalledWith(defender, true, 0, false, expect.any(Object));
+    expect(mock.playerBattlefield[0]).toBeNull();
+    expect(mock.enemyBattlefield[0]).toBeNull();
+  });
+
+  it('Wrath cannot be destroyed by attacker with weakness markers (stymied)', async () => {
+    const attacker = createMockCard({
+      name: 'Pride',
+      power: 8,
+      weaknessMarkers: 1,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+    const defender = createMockCard({
+      name: 'Wrath',
+      power: 5,
+      isEnemy: true,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = attacker;
+    mock.enemyBattlefield[0] = defender;
+
+    const stymied = await mock.phaseManager.handleBattle(attacker, defender, 0, false);
+
+    expect(stymied).toBe(true);
+    expect(mock.destroyCard).not.toHaveBeenCalled();
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('Wrath cannot be destroyed')
+    );
+  });
+
+  it('Elder sends defeated creature to deck instead of destroying', async () => {
+    const attacker = createMockCard({ name: 'Elder', power: 5, hasHaste: true, isEnemy: false }) as unknown as CardEntity;
+    const defender = createMockCard({ name: 'Fledgeling', power: 1, isEnemy: true }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = attacker;
+    mock.enemyBattlefield[0] = defender;
+
+    await mock.phaseManager.handleBattle(attacker, defender, 0, false);
+
+    expect(mock.destroyCard).not.toHaveBeenCalled();
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('placed on top of its owner\'s deck')
+    );
+  });
+
+  it('Wild Wolf marks opponent for destruction at end of round', async () => {
+    const wolf = createMockCard({ name: 'Wild Wolf', power: 1, hasHaste: true, isEnemy: false }) as unknown as CardEntity;
+    const other = createMockCard({ name: 'Noble', power: 4, isEnemy: true }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = wolf;
+    mock.enemyBattlefield[0] = other;
+
+    await mock.phaseManager.handleBattle(wolf, other, 0, false);
+
+    expect(other.data.markedByWildWolf).toBe(true);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/marks .* for destruction at end of round/)
+    );
+  });
+
+  it('invincible defender is not destroyed (attacker stymied)', async () => {
+    const attacker = createMockCard({ name: 'War', power: 9, isEnemy: false }) as unknown as CardEntity;
+    const defender = createMockCard({
+      name: 'Beta',
+      power: 6,
+      isEnemy: true,
+      isInvincible: true,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = attacker;
+    mock.enemyBattlefield[0] = defender;
+
+    const stymied = await mock.phaseManager.handleBattle(attacker, defender, 0, false);
+
+    expect(stymied).toBe(true);
+    expect(mock.destroyCard).not.toHaveBeenCalled();
+  });
+});
+
+describe('Post-combat – War and Alpha', () => {
+  let mock: ReturnType<typeof createMockControllerForBattle>;
+
+  beforeEach(() => {
+    mock = createMockControllerForBattle();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    vi.clearAllMocks();
+  });
+
+  it('War gains +2 Power per Horseman in play after destroying a creature', async () => {
+    const war = createMockCard({
+      name: 'War',
+      power: 9,
+      type: 'Horseman',
+      isChampion: true,
+      powerMarkers: 0,
+      isEnemy: true,
+    }) as unknown as CardEntity;
+    const victim = createMockCard({ name: 'Herald', power: 5, isEnemy: false }) as unknown as CardEntity;
+    const otherHorseman = createMockCard({
+      name: 'Death',
+      power: 9,
+      type: 'Horseman',
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = war;
+    mock.playerBattlefield[0] = victim;
+    mock.enemyBattlefield[1] = otherHorseman;
+
+    await mock.phaseManager.handleBattle(war, victim, 0, false);
+
+    expect(war.data.powerMarkers).toBe(4);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/War gains .* Power Marker.*\+2 per Horseman/)
+    );
+  });
+
+  it('Alpha gains +2 Power after destroying an enemy in battle', async () => {
+    const alpha = createMockCard({
+      name: 'Alpha',
+      power: 7,
+      hasHaste: true,
+      powerMarkers: 0,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+    const victim = createMockCard({ name: 'Baron', power: 2, isEnemy: true }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = alpha;
+    mock.enemyBattlefield[0] = victim;
+
+    await mock.phaseManager.handleBattle(alpha, victim, 0, false);
+
+    expect(alpha.data.powerMarkers).toBe(2);
+    expect(mock.addLog).toHaveBeenCalledWith(expect.stringContaining('Alpha gains 2 Power Marker'));
+  });
+});
+
+describe('AbilityManager – applyAbilityEffect', () => {
+  let mock: ReturnType<typeof createMockControllerForAbilities>;
+
+  beforeEach(() => {
+    mock = createMockControllerForAbilities();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    vi.clearAllMocks();
+  });
+
+  it('destroy effect removes target from battlefield', () => {
+    const source = createMockCard({ name: 'Famine', power: 9, isEnemy: true }) as unknown as CardEntity;
+    const target = createMockCard({ name: 'Sentinel', power: 4, isEnemy: false }) as unknown as CardEntity;
+    mock.playerBattlefield[2] = target;
+
+    mock.abilityManager.applyAbilityEffect(target, { source, effect: 'destroy' });
+
+    expect(mock.destroyCard).toHaveBeenCalledWith(target, false, 2, false, expect.any(Object));
+    expect(mock.playerBattlefield[2]).toBeNull();
+  });
+
+  it('return effect places target on top of owner deck', () => {
+    const source = createMockCard({ name: 'Cherubim', power: 4, isEnemy: false }) as unknown as CardEntity;
+    const target = createMockCard({ name: 'Wrath', power: 7, isEnemy: true }) as unknown as CardEntity;
+    mock.enemyBattlefield[1] = target;
+
+    mock.abilityManager.applyAbilityEffect(target, { source, effect: 'return' });
+
+    expect(mock.enemyBattlefield[1]).toBeNull();
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/places .* on top of its owner's deck/)
+    );
+  });
+
+  it('place_power adds markers to target', () => {
+    const source = createMockCard({
+      name: 'Delta',
+      power: 3,
+      markerPower: 3,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+    const target = createMockCard({
+      name: 'Omega',
+      power: 5,
+      powerMarkers: 0,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.applyAbilityEffect(target, {
+      source,
+      effect: 'place_power',
+      markerPower: 3,
+    });
+
+    expect(target.data.powerMarkers).toBe(3);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('places +3 Power Marker')
+    );
+  });
+
+  it('place_weakness adds weakness markers to target', () => {
+    const source = createMockCard({
+      name: 'Pride',
+      power: 6,
+      markerWeakness: 3,
+      isEnemy: true,
+    }) as unknown as CardEntity;
+    const target = createMockCard({
+      name: 'Alpha',
+      power: 7,
+      weaknessMarkers: 0,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.applyAbilityEffect(target, {
+      source,
+      effect: 'place_weakness',
+      markerWeakness: 3,
+    });
+
+    expect(target.data.weaknessMarkers).toBe(3);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('-3 Weakness Marker')
+    );
+  });
+
+  it('sentinel_absorb adds power markers equal to Limbo creature power', () => {
+    const sentinel = createMockCard({
+      name: 'Sentinel',
+      power: 4,
+      powerMarkers: 0,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+    const limboCreature = createMockCard({
+      name: 'War',
+      power: 9,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.applyAbilityEffect(limboCreature, {
+      source: sentinel,
+      effect: 'sentinel_absorb',
+    });
+
+    expect(sentinel.data.powerMarkers).toBe(9);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('gains 9 Power Markers from')
+    );
+  });
+
+  it('Sloth is immune to place_weakness from another creature', () => {
+    const source = createMockCard({
+      name: 'Pride',
+      power: 6,
+      markerWeakness: 3,
+      type: 'Creature',
+      isEnemy: true,
+    }) as unknown as CardEntity;
+    const sloth = createMockCard({
+      name: 'Sloth',
+      power: 4,
+      weaknessMarkers: 0,
+      abilityImmune: true,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.applyAbilityEffect(sloth, {
+      source,
+      effect: 'place_weakness',
+      markerWeakness: 3,
+    });
+
+    expect(sloth.data.weaknessMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/Sloth is immune to .*ability/)
+    );
+  });
+});
+
+describe('AbilityManager – immunity and counts', () => {
+  let mock: ReturnType<typeof createMockControllerForAbilities>;
+
+  beforeEach(() => {
+    mock = createMockControllerForAbilities();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.seals.forEach((s) => ((s as { champion: CardEntity | null }).champion = null));
+    vi.clearAllMocks();
+  });
+
+  it('isImmuneToAbilities: Sloth is immune to creature abilities', () => {
+    const sloth = createMockCard({
+      name: 'Sloth',
+      abilityImmune: true,
+      type: 'Creature',
+      isEnemy: false,
+    }) as unknown as CardEntity;
+    const source = createMockCard({ name: 'Pride', type: 'Creature', isEnemy: true }) as unknown as CardEntity;
+
+    expect(mock.abilityManager.isImmuneToAbilities(sloth, source)).toBe(true);
+  });
+
+  it('isImmuneToAbilities: non-Sloth creature is not immune by default', () => {
+    const target = createMockCard({ name: 'Noble', type: 'Creature', isEnemy: false }) as unknown as CardEntity;
+    const source = createMockCard({ name: 'Famine', type: 'Horseman', isEnemy: true }) as unknown as CardEntity;
+
+    expect(mock.abilityManager.isImmuneToAbilities(target, source)).toBe(false);
+  });
+
+  it('countHorsemenInPlay counts only flipped Horsemen on owner side', () => {
+    const war = createMockCard({
+      name: 'War',
+      type: 'Horseman',
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const death = createMockCard({
+      name: 'Death',
+      type: 'Horseman',
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = war;
+    mock.enemyBattlefield[1] = death;
+
+    const count = mock.abilityManager.countHorsemenInPlay(true);
+    expect(count).toBe(2);
+  });
+});
