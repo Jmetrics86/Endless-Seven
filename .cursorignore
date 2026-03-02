@@ -1,0 +1,46 @@
+﻿# Cursor ignore – excludes from AI context and codebase indexing
+# Uses .gitignore-style patterns: https://docs.cursor.sh/context/ignore-files
+
+# Dependencies (large, not useful for AI)
+node_modules/
+
+# Build & output
+build/
+dist/
+coverage/
+release/
+release-*/
+*.tsbuildinfo
+
+# Environment & secrets (never expose to AI)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Logs & cache
+*.log
+.cache/
+.parcel-cache/
+.turbo/
+.temp/
+tmp/
+
+# IDE & editor state
+.cursor/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local databases (may contain user/session data)
+*.db
+*.sqlite
+*.sqlite3
+
+# Electron packaging artifacts
+*.blockmap
+electron-builder-override.json
