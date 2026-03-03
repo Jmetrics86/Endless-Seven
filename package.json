@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "build:pages": "cross-env VITE_BASE=/Endless-Seven/ vite build",
+    "deploy": "npm run build:pages && gh-pages -d dist",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
@@ -35,6 +37,7 @@
     "vite": "^6.2.0"
   },
   "devDependencies": {
+    "gh-pages": "^6.2.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",

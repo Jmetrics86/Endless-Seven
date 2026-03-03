@@ -6,8 +6,10 @@ import {defineConfig, loadEnv} from 'vite';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   const forElectron = process.env.BUILD_FOR === 'electron';
+  // GitHub Pages project site: set VITE_BASE in CI (e.g. /repo-name/)
+  const base = process.env.VITE_BASE ?? (forElectron ? './' : '/');
   return {
-    base: forElectron ? './' : '/',
+    base,
     plugins: [react(), tailwindcss()],
     test: {
       globals: true,
