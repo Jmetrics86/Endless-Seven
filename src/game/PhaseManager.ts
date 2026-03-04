@@ -1,6 +1,6 @@
 import gsap from 'gsap';
 import { Phase, Alignment, CardData } from '../types';
-import { CardEntity } from '../entities/CardEntity';
+import { CardEntity, getOrLoadBackTexture } from '../entities/CardEntity';
 import { IGameController } from './interfaces';
 import { GAME_CONSTANTS } from '../constants';
 
@@ -22,6 +22,9 @@ export class PhaseManager {
           this.controller.addLog(`${c!.data.name}'s Invulnerability fades.`);
         }
       });
+
+    // Preload card back texture before creating any hand cards so the first (leftmost) card is never rendered without it
+    await getOrLoadBackTexture();
 
     for (let i = 0; i < 8; i++) {
       if (this.controller.playerDeck.length === 0) break;

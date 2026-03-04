@@ -9,29 +9,46 @@ import { GAME_CONSTANTS } from '../constants';
 import { GameEntity } from '../engine/EntityManager';
 import { CARD_ART_PATHS, CARD_BACK_PATH, cardArtUrl } from '../cardArtPaths';
 
-/** Shared card back texture (loaded once). */
+/** Resolved back texture; also used so update() can apply even if the one-time .then() missed. */
 let sharedBackTexture: THREE.Texture | null = null;
-/** Back planes waiting for shared back texture. */
-const pendingBackMaterials: THREE.MeshBasicMaterial[] = [];
+/** Single Promise for card back texture so all cards wait for one load (no race). */
+let backTextureLoadPromise: Promise<THREE.Texture> | null = null;
+/**
+ * Face texture cache: one Promise per URL so cards that need the same art while it's still loading
+ * wait for the same request instead of getting undefined or starting a duplicate load.
+ */
+const faceTextureLoadPromises: Record<string, Promise<THREE.Texture>> = {};
+/** Resolved face textures by URL so update() can retry applying if the one-time .then() missed. */
+const faceTextureResolvedCache: Record<string, THREE.Texture> = {};
 
-function ensureBackTextureLoaded(mat: THREE.MeshBasicMaterial): void {
-  if (sharedBackTexture) {
-    mat.map = sharedBackTexture;
-    return;
-  }
-  pendingBackMaterials.push(mat);
-  if (pendingBackMaterials.length === 1) {
-    const loader = new THREE.TextureLoader();
+function getOrLoadFaceTexture(url: string): Promise<THREE.Texture> {
+  if (faceTextureLoadPromises[url]) return faceTextureLoadPromises[url];
+  const promise = new Promise<THREE.Texture>((resolve, reject) => {
+    const loader = new THREE.TextureLoader().setCrossOrigin('anonymous');
+    loader.load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      faceTextureResolvedCache[url] = tex;
+      resolve(tex);
+    }, undefined, reject);
+  });
+  faceTextureLoadPromises[url] = promise;
+  return promise;
+}
+
+/** Preload card back texture; call before creating hand cards so the first (leftmost) card gets the texture. */
+export function getOrLoadBackTexture(): Promise<THREE.Texture> {
+  if (sharedBackTexture) return Promise.resolve(sharedBackTexture);
+  if (backTextureLoadPromise) return backTextureLoadPromise;
+  backTextureLoadPromise = new Promise<THREE.Texture>((resolve, reject) => {
+    const loader = new THREE.TextureLoader().setCrossOrigin('anonymous');
     const url = cardArtUrl(CARD_BACK_PATH);
     loader.load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
       sharedBackTexture = tex;
-      const toApply = pendingBackMaterials.slice();
-      pendingBackMaterials.length = 0;
-      toApply.forEach(m => { m.map = tex; });
-    }, undefined, () => {
-      pendingBackMaterials.length = 0;
-    });
-  }
+      resolve(tex);
+    }, undefined, reject);
+  });
+  return backTextureLoadPromise;
 }
 
 export class CardEntity implements GameEntity {
@@ -124,13 +141,17 @@ export class CardEntity implements GameEntity {
     this.defaultFaceTex = new THREE.CanvasTexture(canvas);
     this.faceLabel = new THREE.Mesh(
       new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W * 0.95, GAME_CONSTANTS.CARD_H * 0.95),
-      new THREE.MeshBasicMaterial({ map: this.defaultFaceTex, transparent: true })
+      new THREE.MeshBasicMaterial({
+        map: this.defaultFaceTex,
+        transparent: true,
+        color: 0xffffff
+      })
     );
     this.faceLabel.rotation.x = -Math.PI / 2;
     this.faceLabel.position.y = 0.08;
     this.mesh.add(this.faceLabel);
 
-    // Card back plane (visible when face-down)
+    // Card back plane (visible when face-down); use Promise so all cards wait for one load (no race)
     const backGeo = new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W * 0.95, GAME_CONSTANTS.CARD_H * 0.95);
     const backMat = new THREE.MeshBasicMaterial({
       map: sharedBackTexture ?? undefined,
@@ -140,17 +161,20 @@ export class CardEntity implements GameEntity {
     this.backPlane.rotation.x = Math.PI / 2;
     this.backPlane.position.y = -0.08;
     this.mesh.add(this.backPlane);
-    ensureBackTextureLoaded(backMat);
+    // Kick off load so sharedBackTexture is set when ready. Apply only in update() so the first
+    // card (leftmost) gets the texture the same way as the rest — applying in .then() here can
+    // leave the first card gray because it runs before the mesh is fully in the scene.
+    getOrLoadBackTexture().catch(() => {});
+    if (sharedBackTexture) backMat.map = sharedBackTexture;
 
-    // Load face art if available
+    // Load face art if available; use promise cache so cards requesting same URL while loading wait for one request
     const facePath = CARD_ART_PATHS[data.name];
     if (facePath) {
-      const loader = new THREE.TextureLoader();
-      loader.load(cardArtUrl(facePath), (tex) => {
-        const mat = this.faceLabel.material as THREE.MeshBasicMaterial;
-        if (mat && mat.map !== this.defaultFaceTex) return;
-        mat.map = tex;
-      }, undefined, () => {
+      const url = cardArtUrl(facePath);
+      const faceMat = this.faceLabel.material as THREE.MeshBasicMaterial;
+      getOrLoadFaceTexture(url).then((tex) => {
+        if (faceMat && faceMat.map === this.defaultFaceTex) faceMat.map = tex;
+      }).catch(() => {
         // On error keep canvas fallback
       });
     }
@@ -291,12 +315,28 @@ export class CardEntity implements GameEntity {
     }
     // Ensure back texture is applied if it loaded after this card was created (fixes missed cards e.g. Sloth)
     this.applyBackTextureIfNeeded();
+    // Retry applying face texture from cache if the one-time .then() didn't run (fixes one random gray card)
+    this.applyFaceTextureIfReady();
   }
 
-  /** Call when a card is placed (e.g. on battlefield) so the back texture is applied immediately instead of waiting for the next update tick. */
+  /** If our face art has loaded, apply it; avoids relying only on the initial .then() which can miss. */
+  private applyFaceTextureIfReady(): void {
+    const facePath = CARD_ART_PATHS[this.data.name];
+    if (!facePath) return;
+    const url = cardArtUrl(facePath);
+    const tex = faceTextureResolvedCache[url];
+    if (!tex) return;
+    const faceMat = this.faceLabel.material as THREE.MeshBasicMaterial;
+    if (faceMat.map !== tex) {
+      faceMat.map = tex;
+    }
+  }
+
+  /** Apply back texture when ready; runs every update() so we never miss (fixes one random gray card back). */
   public applyBackTextureIfNeeded(): void {
+    if (!sharedBackTexture) return;
     const backMat = this.backPlane.material as THREE.MeshBasicMaterial;
-    if (!backMat.map && sharedBackTexture) {
+    if (backMat.map !== sharedBackTexture) {
       backMat.map = sharedBackTexture;
     }
   }

@@ -241,8 +241,9 @@ export class GameController implements IGameController {
   }
 
   private loadPileCardBackTexture(): void {
-    const loader = new THREE.TextureLoader();
+    const loader = new THREE.TextureLoader().setCrossOrigin('anonymous');
     loader.load(cardArtUrl(CARD_BACK_PATH), (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
       this.pileCardBackMaterials.forEach((m) => {
         m.map = tex;
         m.color.setHex(0xffffff);
