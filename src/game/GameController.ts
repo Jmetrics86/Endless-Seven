@@ -318,10 +318,11 @@ export class GameController implements IGameController {
   }
 
   private buildDeck(pool: CardData[]): CardData[] {
-    const normalTribes = ['Celestial', 'Lycan', 'Daemon', 'Vampyre'];
+    const tribalFactions = ['Celestial', 'Lycan', 'Daemon', 'Vampyre'];
+    const specialFactions = ['Light', 'Darkness']; // God / Horseman / Avatar: 1 copy each
     let deck: CardData[] = [];
     pool.forEach(card => {
-      const copies = normalTribes.includes(card.faction) ? 3 : 2;
+      const copies = specialFactions.includes(card.faction) ? 1 : (tribalFactions.includes(card.faction) ? 3 : 1);
       for (let i = 0; i < copies; i++) { deck.push({ ...card }); }
     });
     return deck.sort(() => Math.random() - 0.5);

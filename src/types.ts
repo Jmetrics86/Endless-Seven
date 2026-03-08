@@ -81,7 +81,7 @@ export interface GameState {
   weaknessPool: number;
   abilitySourceCardName?: string;
   lockedSealIndex?: number;
-  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY' | 'ALMIGHTY_MARKER_TYPE' | 'LUST_SEAL_INFLUENCE' | 'DEATH_CREATURE_TYPE';
+  decisionContext?: 'FALLEN_ONE' | 'DELTA_SACRIFICE' | 'LUNA_NULLIFY' | 'ALMIGHTY_MARKER_TYPE' | 'DESTROYER_MARKER_TYPE' | 'LUST_SEAL_INFLUENCE' | 'DEATH_CREATURE_TYPE';
   /** Seal index when choosing influence (e.g. Lust effect). */
   sealIndexForChoice?: number;
   /** Death Flip: creature types in play to choose from (Avatar, God, Horseman, Vampyre, Lycan, Celestial, Daemon). */

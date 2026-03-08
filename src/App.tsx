@@ -383,6 +383,35 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext === 'DESTROYER_MARKER_TYPE' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+          >
+            <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">The Destroyer — Activate</div>
+            <div className="text-xs text-gray-200 text-center max-w-xs">
+              {gameState.decisionMessage ?? gameState.instructionText}
+            </div>
+            <div className="flex gap-4 mt-1">
+              <button
+                onClick={() => handleMarkerTypeChoice('power')}
+                className="px-5 py-2 bg-[#00f2ff]/20 border border-[#00f2ff] text-[#00f2ff] hover:bg-[#00f2ff]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                All Power Markers
+              </button>
+              <button
+                onClick={() => handleMarkerTypeChoice('weakness')}
+                className="px-5 py-2 bg-[#ff0044]/20 border border-[#ff0044] text-[#ff4466] hover:bg-[#ff0044]/40 transition-all text-[0.65rem] tracking-widest uppercase font-bold"
+              >
+                All Weakness Markers
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext === 'DEATH_CREATURE_TYPE' && gameState.creatureTypeOptions && gameState.creatureTypeOptions.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -459,7 +488,7 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && gameState.decisionContext !== 'ALMIGHTY_MARKER_TYPE' && gameState.decisionContext !== 'LUST_SEAL_INFLUENCE' && gameState.decisionContext !== 'DEATH_CREATURE_TYPE' && (
+        {gameState && gameState.currentPhase !== Phase.GAME_OVER && gameState.decisionContext && gameState.decisionContext !== 'ALMIGHTY_MARKER_TYPE' && gameState.decisionContext !== 'DESTROYER_MARKER_TYPE' && gameState.decisionContext !== 'LUST_SEAL_INFLUENCE' && gameState.decisionContext !== 'DEATH_CREATURE_TYPE' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

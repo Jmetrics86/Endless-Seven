@@ -1059,6 +1059,348 @@ describe('AbilityManager – applyAbilityEffect', () => {
       expect.stringMatching(/Sloth is immune to .*ability/)
     );
   });
+
+  it('destroy_marker removes one Power Marker from target (used by The Destroyer / The Allotter)', () => {
+    const source = createMockCard({ name: 'The Destroyer', power: 15, isEnemy: false }) as unknown as CardEntity;
+    const target = createMockCard({
+      name: 'Noble',
+      power: 4,
+      powerMarkers: 2,
+      weaknessMarkers: 0,
+      isEnemy: true,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.applyAbilityEffect(target, { source, effect: 'destroy_marker' });
+
+    expect(target.data.powerMarkers).toBe(1);
+    expect(target.data.weaknessMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/destroys a Power Marker on/)
+    );
+    expect(target.updateVisualMarkers).toHaveBeenCalled();
+  });
+
+  it('destroy_marker removes one Weakness Marker when target has no Power Markers', () => {
+    const source = createMockCard({ name: 'The Destroyer', power: 15, isEnemy: false }) as unknown as CardEntity;
+    const target = createMockCard({
+      name: 'Herald',
+      power: 3,
+      powerMarkers: 0,
+      weaknessMarkers: 3,
+      isEnemy: false,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.applyAbilityEffect(target, { source, effect: 'destroy_marker' });
+
+    expect(target.data.powerMarkers).toBe(0);
+    expect(target.data.weaknessMarkers).toBe(2);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/destroys a Weakness Marker on/)
+    );
+    expect(target.updateVisualMarkers).toHaveBeenCalled();
+  });
+
+  it('destroy_marker logs when target has no markers', () => {
+    const source = createMockCard({ name: 'The Destroyer', power: 15, isEnemy: false }) as unknown as CardEntity;
+    const target = createMockCard({
+      name: 'Baron',
+      power: 2,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+      isEnemy: true,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.applyAbilityEffect(target, { source, effect: 'destroy_marker' });
+
+    expect(target.data.powerMarkers).toBe(0);
+    expect(target.data.weaknessMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/No markers to destroy on/)
+    );
+    expect(target.updateVisualMarkers).toHaveBeenCalled();
+  });
+});
+
+describe('The Destroyer – handleActivateAbility (player vs NPC)', () => {
+  let mock: ReturnType<typeof createMockControllerForAbilities>;
+
+  beforeEach(() => {
+    mock = createMockControllerForAbilities();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.seals.forEach((s) => ((s as { champion: CardEntity | null }).champion = null));
+    vi.clearAllMocks();
+  });
+
+  it('when played from player hand (isEnemy: false): shows marker-type dialog then destroys all markers of chosen type', async () => {
+    const destroyer = createMockCard({
+      name: 'The Destroyer',
+      power: 15,
+      isChampion: true,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const cardWithPower = createMockCard({
+      name: 'Noble',
+      power: 4,
+      powerMarkers: 2,
+      weaknessMarkers: 0,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemyWithPower = createMockCard({
+      name: 'Baron',
+      power: 2,
+      powerMarkers: 1,
+      weaknessMarkers: 0,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = destroyer;
+    mock.playerBattlefield[1] = cardWithPower;
+    mock.enemyBattlefield[0] = enemyWithPower;
+
+    const activated = mock.abilityManager.handleActivateAbility(destroyer, false);
+    await Promise.resolve();
+    (mock as unknown as { markerTypeCallback: ((t: 'power' | 'weakness') => void) | null }).markerTypeCallback!('power');
+    await activated;
+
+    expect(mock.updateState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decisionContext: 'DESTROYER_MARKER_TYPE',
+        instructionText: expect.stringMatching(/Choose which marker type to eliminate/),
+      })
+    );
+    expect(mock.zoomOut).toHaveBeenCalled();
+    expect(cardWithPower.data.powerMarkers).toBe(0);
+    expect(enemyWithPower.data.powerMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/destroys all Power Markers in play \(3 removed\)/)
+    );
+  });
+
+  it('when NPC owns the card (isAI: true) and no cards have markers: destroys all of chosen type (0 removed), no UI', async () => {
+    const destroyer = createMockCard({
+      name: 'The Destroyer',
+      power: 15,
+      isChampion: true,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const enemyCard = createMockCard({
+      name: 'Baron',
+      power: 2,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = destroyer;
+    mock.enemyBattlefield[1] = enemyCard;
+
+    await mock.abilityManager.handleActivateAbility(destroyer, true);
+
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/destroys all (Power|Weakness) Markers in play \(0 removed\)/)
+    );
+    expect(mock.updateState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ currentPhase: Phase.ABILITY_TARGETING })
+    );
+  });
+
+  it('when NPC owns the card (isAI: true) and cards have Power Markers: AI destroys all Power markers', async () => {
+    const destroyer = createMockCard({
+      name: 'The Destroyer',
+      power: 15,
+      isChampion: true,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const targetWithMarkers = createMockCard({
+      name: 'Noble',
+      power: 4,
+      powerMarkers: 2,
+      weaknessMarkers: 0,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = destroyer;
+    mock.playerBattlefield[0] = targetWithMarkers;
+
+    await mock.abilityManager.handleActivateAbility(destroyer, true);
+
+    expect(targetWithMarkers.data.powerMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/destroys all Power Markers in play \(2 removed\)/)
+    );
+  });
+
+  it('when NPC owns the card (isAI: true) and only Weakness Markers exist: AI destroys all Weakness markers', async () => {
+    const destroyer = createMockCard({
+      name: 'The Destroyer',
+      power: 15,
+      isChampion: true,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const targetWithWeakness = createMockCard({
+      name: 'Herald',
+      power: 3,
+      powerMarkers: 0,
+      weaknessMarkers: 2,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = destroyer;
+    mock.playerBattlefield[0] = targetWithWeakness;
+
+    await mock.abilityManager.handleActivateAbility(destroyer, true);
+
+    expect(targetWithWeakness.data.weaknessMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/destroys all Weakness Markers in play \(2 removed\)/)
+    );
+  });
+});
+
+describe('The Inevitable – post-combat ability origin (player vs AI)', () => {
+  let mock: ReturnType<typeof createMockControllerForAbilities>;
+
+  beforeEach(() => {
+    mock = createMockControllerForAbilities();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.seals.forEach((s) => ((s as { champion: CardEntity | null }).champion = null));
+    vi.clearAllMocks();
+  });
+
+  it('when player owns The Inevitable (played from player hand): enters ABILITY_TARGETING so human chooses target', async () => {
+    const inevitable = createMockCard({
+      name: 'The Inevitable',
+      power: 9,
+      isChampion: true,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const other = createMockCard({
+      name: 'Noble',
+      power: 4,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = inevitable;
+    mock.enemyBattlefield[0] = other;
+
+    const postCombatPromise = mock.abilityManager.handlePostCombat(inevitable);
+    // Human has not chosen yet: updateState and pendingAbilityData should be set for human UI
+    expect(mock.updateState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentPhase: Phase.ABILITY_TARGETING,
+        instructionText: 'The Inevitable: Select a card or a card with Markers to destroy (card or one Marker).',
+      })
+    );
+    expect(mock.zoomOut).toHaveBeenCalled();
+    const pending = (mock as unknown as { pendingAbilityData: unknown }).pendingAbilityData;
+    expect(pending).toEqual(
+      expect.objectContaining({
+        source: inevitable,
+        effect: 'destroy_or_marker',
+        targetType: 'any',
+      })
+    );
+    // Resolve the promise (simulating user picking a target later)
+    (mock as unknown as { resolutionCallback: (() => void) | null }).resolutionCallback!();
+    await postCombatPromise;
+  });
+
+  it('when AI owns The Inevitable (played from AI hand): AI picks target immediately, no human prompt', async () => {
+    const inevitable = createMockCard({
+      name: 'The Inevitable',
+      power: 9,
+      isChampion: true,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const targetWithMarker = createMockCard({
+      name: 'Noble',
+      power: 4,
+      powerMarkers: 2,
+      weaknessMarkers: 0,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = inevitable;
+    mock.playerBattlefield[0] = targetWithMarker;
+
+    await mock.abilityManager.handlePostCombat(inevitable);
+
+    // AI path: no ABILITY_TARGETING for human, ability was applied by AI
+    expect(mock.updateState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ currentPhase: Phase.ABILITY_TARGETING })
+    );
+    // Effect was applied (e.g. one Power Marker removed from target)
+    expect(targetWithMarker.data.powerMarkers).toBe(1);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringMatching(/destroys a Power Marker on/)
+    );
+  });
+
+  it('when AI owns The Inevitable and target has no markers: AI destroys the card', async () => {
+    const inevitable = createMockCard({
+      name: 'The Inevitable',
+      power: 9,
+      isChampion: true,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const targetNoMarkers = createMockCard({
+      name: 'Herald',
+      power: 5,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = inevitable;
+    mock.playerBattlefield[0] = targetNoMarkers;
+
+    await mock.abilityManager.handlePostCombat(inevitable);
+
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      targetNoMarkers,
+      false,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'The Inevitable', cause: 'ability' })
+    );
+    expect(mock.playerBattlefield[0]).toBeNull();
+  });
+
+  it('when player owns The Inevitable, ability source in pendingAbilityData is the winner card', async () => {
+    const inevitable = createMockCard({
+      name: 'The Inevitable',
+      power: 9,
+      isChampion: true,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = inevitable;
+    mock.playerBattlefield[1] = createMockCard({
+      name: 'Beta',
+      power: 6,
+      isEnemy: false,
+      faceUp: true,
+    }) as unknown as CardEntity;
+
+    mock.abilityManager.handlePostCombat(inevitable);
+    const pending = (mock as unknown as { pendingAbilityData: { source: CardEntity } }).pendingAbilityData;
+    expect(pending.source).toBe(inevitable);
+    expect(pending.source.data.name).toBe('The Inevitable');
+    expect(pending.source.data.isEnemy).toBe(false);
+    (mock as unknown as { resolutionCallback: (() => void) | null }).resolutionCallback!();
+  });
 });
 
 describe('AbilityManager – immunity and counts', () => {

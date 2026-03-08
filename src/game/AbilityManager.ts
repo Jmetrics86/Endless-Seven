@@ -39,9 +39,16 @@ export class AbilityManager {
       return;
     }
     if (winner.data.name === "The Inevitable") {
-      // After destroying a creature, you may destroy another card or Marker in play (only flipped cards)
+      // After destroying a creature, you may destroy another card or Marker in play (only flipped cards).
+      // The player who owns The Inevitable chooses the target: human when played from player hand, AI when from AI hand.
       const allBoard = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
       if (allBoard.length === 0) return;
+      const isAI = winner.data.isEnemy;
+      if (isAI) {
+        const target = allBoard[Math.floor(Math.random() * allBoard.length)];
+        this.applyAbilityEffect(target, { source: winner, effect: 'destroy_or_marker', targetType: 'any' });
+        return;
+      }
       this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
         instructionText: "The Inevitable: Select a card or a card with Markers to destroy (card or one Marker)."
@@ -152,14 +159,32 @@ export class AbilityManager {
     }
 
     if (effect === 'destroy_marker') {
-      if (target.data.powerMarkers > 0) {
-        target.data.powerMarkers--;
-        this.controller.addLog(`${source.data.name} destroys a Power Marker on ${target.data.name}`);
-      } else if (target.data.weaknessMarkers > 0) {
-        target.data.weaknessMarkers--;
-        this.controller.addLog(`${source.data.name} destroys a Weakness Marker on ${target.data.name}`);
+      const markerType = pendingAbilityData.markerType as 'power' | 'weakness' | undefined;
+      if (markerType === 'power') {
+        if (target.data.powerMarkers > 0) {
+          target.data.powerMarkers--;
+          this.controller.addLog(`${source.data.name} destroys a Power Marker on ${target.data.name}`);
+        } else {
+          this.controller.addLog(`No Power markers to destroy on ${target.data.name}`);
+        }
+      } else if (markerType === 'weakness') {
+        if (target.data.weaknessMarkers > 0) {
+          target.data.weaknessMarkers--;
+          this.controller.addLog(`${source.data.name} destroys a Weakness Marker on ${target.data.name}`);
+        } else {
+          this.controller.addLog(`No Weakness markers to destroy on ${target.data.name}`);
+        }
       } else {
-        this.controller.addLog(`No markers to destroy on ${target.data.name}`);
+        // The Allotter / Seraphim: no type chosen — remove one (power preferred)
+        if (target.data.powerMarkers > 0) {
+          target.data.powerMarkers--;
+          this.controller.addLog(`${source.data.name} destroys a Power Marker on ${target.data.name}`);
+        } else if (target.data.weaknessMarkers > 0) {
+          target.data.weaknessMarkers--;
+          this.controller.addLog(`${source.data.name} destroys a Weakness Marker on ${target.data.name}`);
+        } else {
+          this.controller.addLog(`No markers to destroy on ${target.data.name}`);
+        }
       }
       target.updateVisualMarkers();
     } else if (effect === 'destroy') {
@@ -701,28 +726,41 @@ export class AbilityManager {
       return;
     }
 
-    // The Destroyer: Activate = Destroy any one Marker type (single marker, same as The Allotter). Only flipped cards.
+    // The Destroyer: Activate = Destroy all markers of a single chosen type across all active cards (both sides). Player chooses type via dialog; AI chooses without prompt.
     if (source.data.name === "The Destroyer") {
       const allBoard = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
+      const key = (choice: 'power' | 'weakness') => choice === 'power' ? 'powerMarkers' : 'weaknessMarkers';
+      const typeName = (choice: 'power' | 'weakness') => choice === 'power' ? 'Power' : 'Weakness';
       if (isAI) {
-        const withMarkers = allBoard.filter(c => c.data.powerMarkers > 0 || c.data.weaknessMarkers > 0);
-        if (withMarkers.length > 0) {
-          const target = withMarkers[Math.floor(Math.random() * withMarkers.length)];
-          this.applyAbilityEffect(target, { source, effect: 'destroy_marker' });
-        } else {
-          this.controller.addLog(`${source.data.name} finds no Markers to destroy.`);
-        }
+        const totalP = allBoard.reduce((s, c) => s + c.data.powerMarkers, 0);
+        const totalW = allBoard.reduce((s, c) => s + c.data.weaknessMarkers, 0);
+        const choice: 'power' | 'weakness' = totalP >= totalW && totalP > 0 ? 'power' : totalW > 0 ? 'weakness' : 'power';
+        let count = 0;
+        allBoard.forEach(c => {
+          count += c.data[key(choice)];
+          c.data[key(choice)] = 0;
+          c.updateVisualMarkers();
+        });
+        this.controller.addLog(`${source.data.name} destroys all ${typeName(choice)} Markers in play (${count} removed).`);
         return;
       }
       this.controller.updateState({
-        currentPhase: Phase.ABILITY_TARGETING,
-        instructionText: "The Destroyer: Select a card with a Marker to destroy one Marker."
+        decisionContext: 'DESTROYER_MARKER_TYPE',
+        instructionText: "The Destroyer: Choose which marker type to eliminate across all cards.",
+        decisionMessage: "Destroy all Power Markers in play, or all Weakness Markers in play (both sides). Choose one type."
       });
       this.controller.zoomOut();
-      await new Promise<void>((resolve) => {
-        (this.controller as any).resolutionCallback = resolve;
-        (this.controller as any).pendingAbilityData = { source, effect: 'destroy_marker', targetType: 'any' };
+      const choice = await new Promise<'power' | 'weakness'>((resolve) => {
+        (this.controller as any).markerTypeCallback = resolve;
       });
+      this.controller.updateState({ decisionContext: undefined, decisionMessage: undefined });
+      let count = 0;
+      allBoard.forEach(c => {
+        count += c.data[key(choice)];
+        c.data[key(choice)] = 0;
+        c.updateVisualMarkers();
+      });
+      this.controller.addLog(`${source.data.name} destroys all ${typeName(choice)} Markers in play (${count} removed).`);
       return;
     }
 
