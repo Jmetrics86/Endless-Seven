@@ -59,6 +59,7 @@ function createMockCard(
   return {
     data,
     updateVisualMarkers: vi.fn(),
+    applyBackTextureIfNeeded: vi.fn(),
     mesh: { position: { x: 0, y: 0, z: 0 } },
   };
 }
@@ -482,6 +483,29 @@ describe('Post-combat – War and Alpha', () => {
 
     expect(alpha.data.powerMarkers).toBe(2);
     expect(mock.addLog).toHaveBeenCalledWith(expect.stringContaining('Alpha gains 2 Power Marker'));
+  });
+
+  it('Alpha power markers persist after ascending to seal (same card reference, markers not reset)', async () => {
+    const alpha = createMockCard({
+      name: 'Alpha',
+      power: 7,
+      hasHaste: true,
+      powerMarkers: 0,
+      isEnemy: false,
+      isChampion: true,
+    }) as unknown as CardEntity;
+    const victim = createMockCard({ name: 'Baron', power: 2, isEnemy: true }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = alpha;
+    mock.enemyBattlefield[0] = victim;
+
+    await mock.phaseManager.handleBattle(alpha, victim, 0, false);
+    expect(alpha.data.powerMarkers).toBe(2);
+
+    mock.phaseManager.ascendToSeal(alpha, 0);
+
+    expect(mock.seals[0].champion).toBe(alpha);
+    expect(mock.seals[0].champion!.data.powerMarkers).toBe(2);
+    expect(alpha.updateVisualMarkers).toHaveBeenCalled();
   });
 });
 

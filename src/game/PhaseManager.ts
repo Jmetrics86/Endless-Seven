@@ -921,10 +921,12 @@ export class PhaseManager {
   public ascendToSeal(card: CardEntity, idx: number) {
     if (card.data.isEnemy) this.controller.enemyBattlefield[idx] = null;
     else this.controller.playerBattlefield[idx] = null;
-    
+
     this.controller.addLog(`${card.data.name} ascends to Seal ${idx + 1}`);
     this.controller.seals[idx].champion = card;
     card.applyBackTextureIfNeeded(); // All cards share same back graphic
+    // Ensure power/weakness marker visuals persist when card moves to seal (e.g. Alpha +2 from destroying enemy)
+    card.updateVisualMarkers();
     gsap.to(card.mesh.position, {
       x: this.controller.seals[idx].mesh.position.x,
       y: 0.6,
