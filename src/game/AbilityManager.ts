@@ -270,6 +270,48 @@ export class AbilityManager {
     return flippedInPlay.filter(considerVampyre).length;
   }
 
+  /**
+   * State-based check: any creature whose effective Power Value is reduced to 0 or less
+   * (base power + Power Markers − Weakness Markers) is destroyed, regardless of
+   * temporary combat invincibility or protection. Applies to all creatures in play
+   * (battlefield and champions on Seals).
+   */
+  public enforceZeroPowerDestruction() {
+    const effectivePower = (card: CardEntity) =>
+      card.data.power + card.data.powerMarkers - card.data.weaknessMarkers;
+
+    // Battlefield creatures
+    for (let i = 0; i < this.controller.playerBattlefield.length; i++) {
+      const pCard = this.controller.playerBattlefield[i];
+      if (pCard && pCard.data.type === 'Creature' && effectivePower(pCard) <= 0) {
+        this.controller.destroyCard(pCard, false, i, false, {
+          cardName: 'Markers',
+          cause: 'ability'
+        });
+      }
+
+      const eCard = this.controller.enemyBattlefield[i];
+      if (eCard && eCard.data.type === 'Creature' && effectivePower(eCard) <= 0) {
+        this.controller.destroyCard(eCard, true, i, false, {
+          cardName: 'Markers',
+          cause: 'ability'
+        });
+      }
+    }
+
+    // Champions on Seals
+    this.controller.seals.forEach((seal, idx) => {
+      const champ = seal.champion;
+      if (champ && champ.data.type === 'Creature' && effectivePower(champ) <= 0) {
+        this.controller.destroyCard(champ, champ.data.isEnemy, idx, true, {
+          cardName: 'Markers',
+          cause: 'ability'
+        });
+        seal.champion = null;
+      }
+    });
+  }
+
   public async allocateCounters(card: CardEntity, isAI: boolean) {
     const data = card.data;
     let powerPool = data.markerPower || 0;

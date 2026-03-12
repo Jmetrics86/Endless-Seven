@@ -13,15 +13,8 @@ export class PhaseManager {
     this.controller.addLog(`--- Round ${this.controller.state.currentRound} Prep Phase ---`);
     this.controller.updateState({ currentPhase: Phase.PREP, phaseStep: 'Step 1: Draw Hand', lockedSealIndex: -1 });
 
-    // Clear temporary invincibility from previous rounds
-    [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
-      .filter(c => c !== null)
-      .forEach(c => {
-        if (c!.data.isInvincible) {
-          c!.data.isInvincible = false;
-          this.controller.addLog(`${c!.data.name}'s Invulnerability fades.`);
-        }
-      });
+    // Clear any temporary battle invincibility applied in the previous round
+    this.clearTemporaryInvincibility();
 
     // Preload card back texture before creating any hand cards so the first (leftmost) card is never rendered without it
     await getOrLoadBackTexture();
@@ -51,6 +44,18 @@ export class PhaseManager {
     this.enemyReinforce();
     this.controller.isProcessing = false;
     this.controller.updateState({ phaseStep: 'Step 3: Reinforce' });
+  }
+
+  /** Clear temporary battle invincibility from all cards in play (battlefield + champions). */
+  public clearTemporaryInvincibility() {
+    [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+      .filter(c => c !== null)
+      .forEach(c => {
+        if (c!.data.isInvincible) {
+          c!.data.isInvincible = false;
+          this.controller.addLog(`${c!.data.name}'s Invulnerability fades.`);
+        }
+      });
   }
 
   private enemyReinforce() {
@@ -395,9 +400,11 @@ export class PhaseManager {
             if (side === 'enemy') {
               const validSeals = this.controller.seals.filter(s => s.index === idx && !s.champion);
               if (validSeals.length > 0) {
-                const align = Math.random() < 0.5 ? Alignment.LIGHT : Alignment.DARK;
-                this.controller.addLog(`Lust's effect: Seal ${idx + 1} influence changed.`);
-                await this.controller.claimSeal(idx, align, {
+                const pAlign = this.controller.state.playerAlignment;
+                const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
+                const npcAlign = side === 'enemy' ? eAlign : pAlign;
+                this.controller.addLog(`Lust's effect: Seal ${idx + 1} influence changed to ${npcAlign === Alignment.LIGHT ? 'Light' : 'Dark'}.`);
+                await this.controller.claimSeal(idx, npcAlign, {
                   type: 'ability',
                   cardName: current.data.name
                 });
@@ -546,10 +553,15 @@ export class PhaseManager {
       if (current.data.hasSealTargetAbility && isFlipping) {
         await this.controller.handleSealTargetAbility(current, side === 'enemy');
       }
-      
+      // Re-evaluate board state for next ability step iteration
       pCard = this.controller.playerBattlefield[idx];
       eCard = this.controller.enemyBattlefield[idx];
     }
+
+    // After all flip/activate abilities (including global marker changes), enforce that
+    // any creature whose effective Power Value has been reduced to 0 or less is destroyed,
+    // even if it has temporary combat invincibility. This applies across the whole board.
+    this.controller.abilityManager.enforceZeroPowerDestruction();
 
     if (pCard) pCard.data.faceUp = true;
     if (eCard) eCard.data.faceUp = true;
@@ -722,15 +734,20 @@ export class PhaseManager {
     }
 
     // Resolve Delta's end-of-round sacrifice and buff
-    // Enemy Delta: sacrifice and pick a random ally to receive +3
+    // Enemy Delta: sacrifice and pick the strongest ally (by effective Power Value) to receive +3
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
       const eCard = this.controller.enemyBattlefield[i];
       if (eCard && eCard.data.name === "Delta" && eCard.data.pendingDeltaSacrifice) {
         this.controller.addLog(`${eCard.data.name} sacrifices itself to empower an ally.`);
         this.controller.destroyCard(eCard, true, i, false);
-        const enemyAllies = [...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null) as CardEntity[];
+        const enemyAllies = [...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+          .filter(c => c !== null) as CardEntity[];
         if (enemyAllies.length > 0) {
-          const target = enemyAllies[Math.floor(Math.random() * enemyAllies.length)];
+          const effectivePower = (card: CardEntity) =>
+            card.data.power + card.data.powerMarkers - card.data.weaknessMarkers;
+          const target = enemyAllies.reduce((best, current) =>
+            effectivePower(current) > effectivePower(best) ? current : best
+          , enemyAllies[0]);
           target.data.markedForDeltaBuff = true;
         }
       }

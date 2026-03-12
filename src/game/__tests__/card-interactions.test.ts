@@ -946,6 +946,185 @@ describe('Pestilence – flip weakness by Horseman count', () => {
   });
 });
 
+describe('Nephilim – temporary invulnerability', () => {
+  let mock: ReturnType<typeof createMockControllerForBattle>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mock = createMockControllerForBattle();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.state.currentPhase = Phase.RESOLUTION;
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function resolveSealWithFakeTimers(idx: number) {
+    const p = mock.phaseManager.resolveSeal(idx);
+    await vi.runAllTimersAsync();
+    return p;
+  }
+
+  it('grants Nephilim battle invulnerability on the round it flips', async () => {
+    const nephilim = createMockCard({
+      name: 'Nephilim',
+      power: 5,
+      type: 'Creature',
+      isEnemy: false,
+      faceUp: false,
+      isInvincible: false,
+    }) as unknown as CardEntity;
+    const opponent = createMockCard({
+      name: 'Noble',
+      power: 4,
+      type: 'Creature',
+      isEnemy: true,
+      faceUp: false,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = nephilim;
+    mock.enemyBattlefield[0] = opponent;
+
+    await resolveSealWithFakeTimers(0);
+
+    expect(nephilim.data.isInvincible).toBe(true);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('Nephilim gains battle invulnerability this turn')
+    );
+  });
+
+  it('clears Nephilim invulnerability at the start of the next round (prep phase)', async () => {
+    const nephilim = createMockCard({
+      name: 'Nephilim',
+      power: 5,
+      type: 'Creature',
+      isEnemy: false,
+      faceUp: false,
+      isInvincible: false,
+    }) as unknown as CardEntity;
+    const opponent = createMockCard({
+      name: 'Noble',
+      power: 4,
+      type: 'Creature',
+      isEnemy: true,
+      faceUp: false,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = nephilim;
+    mock.enemyBattlefield[0] = opponent;
+
+    // Round where Nephilim flips and gains invulnerability
+    await resolveSealWithFakeTimers(0);
+    expect(nephilim.data.isInvincible).toBe(true);
+
+    // Start of next round: clearing temporary invincibility should remove the flag
+    mock.phaseManager.clearTemporaryInvincibility();
+
+    expect(nephilim.data.isInvincible).toBe(false);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining("Nephilim's Invulnerability fades.")
+    );
+  });
+});
+
+describe('Delta – NPC end-of-round +3 buff targeting', () => {
+  let mock: ReturnType<typeof createMockControllerForBattle>;
+
+  beforeEach(() => {
+    mock = createMockControllerForBattle();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.seals.forEach((s) => ((s as { champion: CardEntity | null }).champion = null));
+    vi.clearAllMocks();
+  });
+
+  it('NPC Delta sacrifices and buffs the strongest enemy ally on the battlefield', async () => {
+    const delta = createMockCard({
+      name: 'Delta',
+      power: 3,
+      type: 'Creature',
+      isEnemy: true,
+      faceUp: true,
+      pendingDeltaSacrifice: true,
+    }) as unknown as CardEntity;
+    const weakerAlly = createMockCard({
+      name: 'Weaker Ally',
+      power: 2,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const strongerAlly = createMockCard({
+      name: 'Stronger Ally',
+      power: 5,
+      powerMarkers: 1,
+      weaknessMarkers: 0,
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+
+    mock.enemyBattlefield[0] = delta;
+    mock.enemyBattlefield[1] = weakerAlly;
+    mock.enemyBattlefield[2] = strongerAlly;
+
+    await (mock.phaseManager as any).cleanupEndOfRoundEffects();
+
+    // Delta should be sacrificed
+    expect(mock.enemyBattlefield[0]).toBeNull();
+    // Strongest ally (by effective power) receives +3
+    expect(strongerAlly.data.powerMarkers).toBe(4);
+    expect(weakerAlly.data.powerMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('Stronger Ally receives +3 Power Markers from Delta\'s sacrifice.')
+    );
+  });
+
+  it('NPC Delta considers champions on seals and buffs the strongest enemy card overall', async () => {
+    const delta = createMockCard({
+      name: 'Delta',
+      power: 3,
+      type: 'Creature',
+      isEnemy: true,
+      faceUp: true,
+      pendingDeltaSacrifice: true,
+    }) as unknown as CardEntity;
+    const battlefieldAlly = createMockCard({
+      name: 'Field Ally',
+      power: 4,
+      powerMarkers: 0,
+      weaknessMarkers: 1, // effective 3
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    const championAlly = createMockCard({
+      name: 'Seal Champion',
+      power: 6,
+      powerMarkers: 0,
+      weaknessMarkers: 0, // effective 6 (strongest)
+      isEnemy: true,
+      faceUp: true,
+      isChampion: true,
+    }) as unknown as CardEntity;
+
+    mock.enemyBattlefield[0] = delta;
+    mock.enemyBattlefield[1] = battlefieldAlly;
+    mock.seals[2].champion = championAlly;
+
+    await (mock.phaseManager as any).cleanupEndOfRoundEffects();
+
+    // Delta should be sacrificed
+    expect(mock.enemyBattlefield[0]).toBeNull();
+    // Strongest ally across battlefield and seals (championAlly) receives +3
+    expect(championAlly.data.powerMarkers).toBe(3);
+    expect(battlefieldAlly.data.powerMarkers).toBe(0);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('Seal Champion receives +3 Power Markers from Delta\'s sacrifice.')
+    );
+  });
+});
+
 describe('AbilityManager – applyAbilityEffect', () => {
   let mock: ReturnType<typeof createMockControllerForAbilities>;
 
@@ -1358,7 +1537,11 @@ describe('The Inevitable – post-combat ability origin (player vs AI)', () => {
     mock.enemyBattlefield[0] = inevitable;
     mock.playerBattlefield[0] = targetWithMarker;
 
+    // Deterministic: ensure AI selects the player creature (index 0 in allBoard)
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
     await mock.abilityManager.handlePostCombat(inevitable);
+    randSpy.mockRestore();
 
     // AI path: no ABILITY_TARGETING for human, ability was applied by AI
     expect(mock.updateState).not.toHaveBeenCalledWith(
@@ -1390,7 +1573,11 @@ describe('The Inevitable – post-combat ability origin (player vs AI)', () => {
     mock.enemyBattlefield[0] = inevitable;
     mock.playerBattlefield[0] = targetNoMarkers;
 
+    // Deterministic: ensure AI selects the player creature (index 0 in allBoard)
+    const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+
     await mock.abilityManager.handlePostCombat(inevitable);
+    randSpy.mockRestore();
 
     expect(mock.destroyCard).toHaveBeenCalledWith(
       targetNoMarkers,
@@ -1475,6 +1662,129 @@ describe('AbilityManager – immunity and counts', () => {
 
     const count = mock.abilityManager.countHorsemenInPlay(true);
     expect(count).toBe(2);
+  });
+});
+
+describe('AbilityManager – enforceZeroPowerDestruction (markers can kill any creature)', () => {
+  let mock: ReturnType<typeof createMockControllerForAbilities>;
+
+  beforeEach(() => {
+    mock = createMockControllerForAbilities();
+    mock.playerBattlefield.fill(null);
+    mock.enemyBattlefield.fill(null);
+    mock.seals.forEach((s) => ((s as { champion: CardEntity | null }).champion = null));
+    vi.clearAllMocks();
+  });
+
+  it('destroys a player creature on battlefield when effective power is reduced to 0 by weakness markers', () => {
+    const creature = createMockCard({
+      name: 'Test Creature',
+      power: 3,
+      powerMarkers: 0,
+      weaknessMarkers: 3,
+      isEnemy: false,
+      type: 'Creature',
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = creature;
+
+    mock.abilityManager.enforceZeroPowerDestruction();
+
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      creature,
+      false,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Markers', cause: 'ability' })
+    );
+    expect(mock.playerBattlefield[0]).toBeNull();
+  });
+
+  it('destroys an enemy creature on battlefield when effective power is negative', () => {
+    const enemyCreature = createMockCard({
+      name: 'Enemy Creature',
+      power: 2,
+      powerMarkers: 0,
+      weaknessMarkers: 5,
+      isEnemy: true,
+      type: 'Creature',
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[1] = enemyCreature;
+
+    mock.abilityManager.enforceZeroPowerDestruction();
+
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      enemyCreature,
+      true,
+      1,
+      false,
+      expect.objectContaining({ cardName: 'Markers', cause: 'ability' })
+    );
+    expect(mock.enemyBattlefield[1]).toBeNull();
+  });
+
+  it('destroys a champion creature on a seal when effective power is 0', () => {
+    const champ = createMockCard({
+      name: 'Seal Champion',
+      power: 4,
+      powerMarkers: 1,
+      weaknessMarkers: 5,
+      isEnemy: false,
+      type: 'Creature',
+      isChampion: true,
+    }) as unknown as CardEntity;
+    mock.seals[2].champion = champ;
+
+    mock.abilityManager.enforceZeroPowerDestruction();
+
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      champ,
+      false,
+      2,
+      true,
+      expect.objectContaining({ cardName: 'Markers', cause: 'ability' })
+    );
+    expect(mock.seals[2].champion).toBeNull();
+  });
+
+  it('ignores non-creature cards even if their effective power is 0 or less', () => {
+    const avatar = createMockCard({
+      name: 'Avatar Card',
+      power: 5,
+      powerMarkers: 0,
+      weaknessMarkers: 10,
+      isEnemy: false,
+      type: 'Avatar',
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = avatar;
+
+    mock.abilityManager.enforceZeroPowerDestruction();
+
+    expect(mock.destroyCard).not.toHaveBeenCalled();
+    expect(mock.playerBattlefield[0]).toBe(avatar);
+  });
+
+  it('destroys a creature even if it is currently battle-invincible', () => {
+    const invincibleCreature = createMockCard({
+      name: 'Invincible Creature',
+      power: 4,
+      powerMarkers: 0,
+      weaknessMarkers: 5,
+      isEnemy: false,
+      type: 'Creature',
+      isInvincible: true,
+    }) as unknown as CardEntity;
+    mock.playerBattlefield[0] = invincibleCreature;
+
+    mock.abilityManager.enforceZeroPowerDestruction();
+
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      invincibleCreature,
+      false,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Markers', cause: 'ability' })
+    );
+    expect(mock.playerBattlefield[0]).toBeNull();
   });
 });
 
@@ -1652,6 +1962,66 @@ describe('Lust – seal influence', () => {
     expect(mock.claimSeal).toHaveBeenCalledWith(
       0,
       Alignment.DARK,
+      expect.objectContaining({ type: 'ability', cardName: 'Lust' })
+    );
+  });
+
+  it('NPC Lust: seal influence is set to NPC alignment (no player choice)', async () => {
+    const mock = createMockControllerForLust(Alignment.DARK);
+    mock.state.currentPhase = Phase.RESOLUTION;
+    // For this test, Lust is controlled by the enemy (NPC)
+    const lust = createMockCard({
+      name: 'Lust',
+      power: 2,
+      hasLustSealEffect: true,
+      isEnemy: true,
+      faceUp: false,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    const opponent = createMockCard({
+      name: 'Herald',
+      power: 3,
+      isEnemy: false,
+      faceUp: false,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = lust;
+    mock.playerBattlefield[0] = opponent;
+    mock.seals[0].champion = null;
+    mock.seals[0].alignment = Alignment.NEUTRAL;
+
+    await mock.phaseManager.resolveSeal(0);
+
+    // Lust and opponent should both be sacrificed
+    expect(mock.destroyCard).toHaveBeenCalledTimes(2);
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Lust' }) }),
+      true,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Lust', cause: 'ability' })
+    );
+    expect(mock.destroyCard).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Herald' }) }),
+      false,
+      0,
+      false,
+      expect.objectContaining({ cardName: 'Lust', cause: 'ability' })
+    );
+
+    // No player choice dialog should be shown for NPC Lust
+    expect(mock.updateState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ decisionContext: 'LUST_SEAL_INFLUENCE' })
+    );
+
+    // Seal influence should be set to the enemy (NPC) alignment (opposite of player)
+    const pAlign = mock.state.playerAlignment;
+    const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
+    expect(mock.claimSeal).toHaveBeenCalledWith(
+      0,
+      eAlign,
       expect.objectContaining({ type: 'ability', cardName: 'Lust' })
     );
   });
