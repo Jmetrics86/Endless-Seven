@@ -280,11 +280,15 @@ export class PhaseManager {
 
       // Nephilim Activate
       if (isActivate && current.data.name === "Nephilim") {
+        current.data.isActivatingAbility = true;
         await (this.controller.abilityManager as any).handleActivateAbility(current, current.data.isEnemy);
+        current.data.isActivatingAbility = false;
       }
       // The Almighty, The Allotter, Saint Michael, The Spinner, Lord, Greed: Activate
       if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner" || current.data.name === "Lord" || current.data.name === "Greed" || current.data.name === "The Destroyer" || current.data.name === "Lilith" || current.data.name === "Death")) {
+        current.data.isActivatingAbility = true;
         await (this.controller.abilityManager as any).handleActivateAbility(current, current.data.isEnemy);
+        current.data.isActivatingAbility = false;
       }
 
       // Faction Presence: The Spinner (Light) on Flip; Lord is Activate-only (handled in handleActivateAbility). Only flipped cards count.
@@ -384,8 +388,10 @@ export class PhaseManager {
 
       // Delta Activate: mark that Delta can sacrifice at end of round
       if (isActivate && current.data.name === "Delta") {
+        current.data.isActivatingAbility = true;
         current.data.pendingDeltaSacrifice = true;
         this.controller.addLog(`${current.data.name} readies its end-of-round sacrifice.`);
+        current.data.isActivatingAbility = false;
       }
 
       // Lust

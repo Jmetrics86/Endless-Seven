@@ -234,6 +234,10 @@ export class AbilityManager {
       } else if (idxP !== -1) this.controller.destroyCard(target, false, idxP, false, killedBy);
       else if (idxE !== -1) this.controller.destroyCard(target, true, idxE, false, killedBy);
     }
+    // Ability effect resolved; ensure any activation highlight on the source is cleared
+    if (source && source.data.isActivatingAbility) {
+      source.data.isActivatingAbility = false;
+    }
   }
 
   /** Return a creature to top of its owner's deck (e.g. Elder's effect). */
@@ -370,6 +374,7 @@ export class AbilityManager {
         }
         return Promise.resolve();
       }
+      source.data.isActivatingAbility = true;
       this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
         instructionText: "Lord: Choose a Champion to place on top of its owner's deck."
@@ -391,6 +396,7 @@ export class AbilityManager {
         }
         return Promise.resolve();
       }
+      source.data.isActivatingAbility = true;
       this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
         instructionText: 'Sentinel: Choose a creature in Limbo (power value added to Sentinel).',
@@ -420,6 +426,7 @@ export class AbilityManager {
         }
         return Promise.resolve();
       }
+      source.data.isActivatingAbility = true;
       this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
         instructionText: "Envy: Choose a creature with Power Value ≥ Envy's to place -3 Weakness on."
@@ -452,6 +459,7 @@ export class AbilityManager {
       : data.effect === 'place_weakness'
       ? (data.targetType === 'creature_power_gte' ? "Envy: Choose a creature with Power Value ≥ Envy's to place -3 Weakness on." : `${source.data.name}: Choose a creature to place -${source.data.markerWeakness ?? 3} Weakness on.`)
       : `Select a target to ${data.effect?.toUpperCase()}.`;
+    source.data.isActivatingAbility = true;
     this.controller.updateState({
       currentPhase: Phase.ABILITY_TARGETING,
       instructionText

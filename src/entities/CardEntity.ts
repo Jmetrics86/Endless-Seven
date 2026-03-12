@@ -63,6 +63,8 @@ export class CardEntity implements GameEntity {
     markedByWildWolf?: boolean;
     pendingDeltaSacrifice?: boolean;
     markedForDeltaBuff?: boolean;
+    /** True while this card is resolving a non-flip ability (Activate, etc.). */
+    isActivatingAbility?: boolean;
   };
 
   private pCanvas: HTMLCanvasElement;
@@ -82,6 +84,12 @@ export class CardEntity implements GameEntity {
   private nMesh: THREE.Mesh;
   private xMesh: THREE.Mesh;
 
+  /** Base emissive color used when not highlighting ability activation. */
+  private baseEmissiveColor: THREE.Color;
+
+  /** Simple top-plane halo used when this card is activating a non-flip ability. */
+  private abilityHalo: THREE.Mesh;
+
   /** Face label mesh (top of card); material.map may be replaced when art loads. */
   private faceLabel: THREE.Mesh;
   /** Back plane (bottom of card); shows when card is face down. */
@@ -99,7 +107,8 @@ export class CardEntity implements GameEntity {
       isSuppressed: false,
       markedByWildWolf: false,
       pendingDeltaSacrifice: false,
-      markedForDeltaBuff: false
+      markedForDeltaBuff: false,
+      isActivatingAbility: false
     };
 
     this.mesh = new THREE.Group();
@@ -107,9 +116,15 @@ export class CardEntity implements GameEntity {
       ? (playerAlignment === Alignment.LIGHT ? 0x551111 : 0x113366) 
       : (playerAlignment === Alignment.LIGHT ? 0x113366 : 0x551111);
 
+    this.baseEmissiveColor = new THREE.Color(color);
+
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(GAME_CONSTANTS.CARD_W, 0.1, GAME_CONSTANTS.CARD_H),
-      new THREE.MeshPhongMaterial({ color, emissive: color, emissiveIntensity: isEnemy ? 0.3 : 0.8 })
+      new THREE.MeshPhongMaterial({
+        color,
+        emissive: this.baseEmissiveColor,
+        emissiveIntensity: isEnemy ? 0.3 : 0.8
+      })
     );
     this.mesh.add(body);
 
@@ -227,6 +242,20 @@ export class CardEntity implements GameEntity {
     this.mesh.add(this.xMesh);
 
     this.updateVisualMarkers();
+
+    // Ability activation halo (large, bright, additive white ring above card)
+    const haloGeo = new THREE.CircleGeometry(GAME_CONSTANTS.CARD_W * 0.9, 32);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.0,
+      side: THREE.DoubleSide
+    });
+    this.abilityHalo = new THREE.Mesh(haloGeo, haloMat);
+    this.abilityHalo.rotation.x = -Math.PI / 2;
+    this.abilityHalo.position.set(0, 0.13, 0);
+    this.abilityHalo.visible = false;
+    this.mesh.add(this.abilityHalo);
   }
 
   public updateVisualMarkers() {
@@ -308,10 +337,28 @@ export class CardEntity implements GameEntity {
   public update(time: number) {
     const body = this.mesh.children[0] as THREE.Mesh;
     const material = body.material as THREE.MeshPhongMaterial;
-    if (this.data.faceUp) {
-      material.emissiveIntensity = 0.8 + Math.sin(time * 4) * 0.4;
+    if (this.data.isActivatingAbility) {
+      // Strong white emissive + pulsing scale + bright halo
+      material.emissive.set(0xffffff);
+      material.emissiveIntensity = 1.8 + Math.sin(time * 10) * 0.7;
+
+      const pulse = 1.05 + Math.sin(time * 8) * 0.03;
+      this.mesh.scale.set(pulse, 1, pulse);
+
+      const haloMat = this.abilityHalo.material as THREE.MeshBasicMaterial;
+      this.abilityHalo.visible = true;
+      haloMat.opacity = 0.7 + Math.sin(time * 8) * 0.25;
     } else {
-      material.emissiveIntensity = 0.3 + Math.sin(time * 2) * 0.1;
+      // Restore base visuals
+      material.emissive.copy(this.baseEmissiveColor);
+      this.mesh.scale.set(1, 1, 1);
+      this.abilityHalo.visible = false;
+
+      if (this.data.faceUp) {
+        material.emissiveIntensity = 0.8 + Math.sin(time * 4) * 0.4;
+      } else {
+        material.emissiveIntensity = 0.3 + Math.sin(time * 2) * 0.1;
+      }
     }
     // Ensure back texture is applied if it loaded after this card was created (fixes missed cards e.g. Sloth)
     this.applyBackTextureIfNeeded();

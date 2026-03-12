@@ -482,6 +482,10 @@ export class GameController implements IGameController {
       if (this.currentResolvingSealIndex !== -1) this.zoomIn(this.currentResolvingSealIndex);
     }
     this.pendingAbilityData = null;
+    // Clear any ability activation highlight on the source card, if present
+    if ((this.pendingAbilityData as any)?.source) {
+      (this.pendingAbilityData as any).source.data.isActivatingAbility = false;
+    }
     if (this.resolutionCallback) this.resolutionCallback();
     this.resolutionCallback = null;
   }
@@ -496,6 +500,20 @@ export class GameController implements IGameController {
 
     this.addLog("Forcing skip of current interaction...");
     this.isProcessing = false;
+
+    // Clear any ability activation highlight on all cards so glow never lingers after a skip
+    const clearActivationGlow = (card: CardEntity | null) => {
+      if (card && card.data.isActivatingAbility) {
+        card.data.isActivatingAbility = false;
+      }
+    };
+    this.playerBattlefield.forEach(clearActivationGlow);
+    this.enemyBattlefield.forEach(clearActivationGlow);
+    this.playerHand.forEach(clearActivationGlow);
+    this.playerLimbo.forEach(clearActivationGlow);
+    this.enemyLimbo.forEach(clearActivationGlow);
+    this.seals.forEach(seal => clearActivationGlow(seal.champion));
+
     this.pendingAbilityData = null;
     
     if (this.resolutionCallback) {
