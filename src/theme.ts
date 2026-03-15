@@ -12,6 +12,7 @@ export const ENV_THEME_COLORS = {
     sceneBg: 0x1e293b,      /* slate-800 */
     sceneFog: 0x1e293b,
     floor: 0x334155,        /* slate-700 */
+    table: 0x4b5563,        /* gray-600, dark neutral gray play surface */
     sealBase: 0x475569,     /* slate-600 */
     sealEmissive: 0x334155,
     slotFill: 0x475569,
@@ -24,6 +25,7 @@ export const ENV_THEME_COLORS = {
     sceneBg: 0xf8fafc,      /* slate-50 / white */
     sceneFog: 0xf8fafc,
     floor: 0xe2e8f0,        /* slate-200 */
+    table: 0x6b7280,        /* gray-500, medium neutral gray play surface */
     sealBase: 0xcbd5e1,     /* slate-300 */
     sealEmissive: 0xf1f5f9, /* slate-100 */
     slotFill: 0x94a3b8,     /* slate-400 */

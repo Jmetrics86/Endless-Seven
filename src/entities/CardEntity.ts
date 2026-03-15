@@ -87,7 +87,7 @@ export class CardEntity implements GameEntity {
   /** Base emissive color used when not highlighting ability activation. */
   private baseEmissiveColor: THREE.Color;
 
-  /** Simple top-plane halo used when this card is activating a non-flip ability. */
+  /** Rectangular halo on the table when this card is activating a non-flip ability. */
   private abilityHalo: THREE.Mesh;
 
   /** Face label mesh (top of card); material.map may be replaced when art loads. */
@@ -243,8 +243,8 @@ export class CardEntity implements GameEntity {
 
     this.updateVisualMarkers();
 
-    // Ability activation halo (large, bright, additive white ring above card)
-    const haloGeo = new THREE.CircleGeometry(GAME_CONSTANTS.CARD_W * 0.9, 32);
+    // Ability activation: rectangle on table (card-shaped) + vertical beam up
+    const haloGeo = new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W * 1.08, GAME_CONSTANTS.CARD_H * 1.08);
     const haloMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -338,7 +338,7 @@ export class CardEntity implements GameEntity {
     const body = this.mesh.children[0] as THREE.Mesh;
     const material = body.material as THREE.MeshPhongMaterial;
     if (this.data.isActivatingAbility) {
-      // Strong white emissive + pulsing scale + bright halo
+      // Strong white emissive + pulsing scale + rectangular halo
       material.emissive.set(0xffffff);
       material.emissiveIntensity = 1.8 + Math.sin(time * 10) * 0.7;
 
@@ -347,7 +347,7 @@ export class CardEntity implements GameEntity {
 
       const haloMat = this.abilityHalo.material as THREE.MeshBasicMaterial;
       this.abilityHalo.visible = true;
-      haloMat.opacity = 0.7 + Math.sin(time * 8) * 0.25;
+      haloMat.opacity = 0.65 + Math.sin(time * 8) * 0.25;
     } else {
       // Restore base visuals
       material.emissive.copy(this.baseEmissiveColor);

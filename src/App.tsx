@@ -28,7 +28,21 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [showSelection, setShowSelection] = useState(true);
   const [zoneSearchModal, setZoneSearchModal] = useState<'limbo' | 'graveyard' | 'deck' | null>(null);
+  const [logMinimized, setLogMinimized] = useState(false);
+  const logScrollRef = useRef<HTMLDivElement>(null);
   const [environmentTheme, setEnvironmentTheme] = useState<EnvironmentTheme>(loadStoredTheme);
+
+  const LOG_RECENT_COUNT = 20;
+  const displayLogs =
+    gameState?.currentPhase === Phase.GAME_OVER
+      ? gameState.logs
+      : (gameState?.logs ?? []).slice(-LOG_RECENT_COUNT);
+
+  useEffect(() => {
+    if (displayLogs.length && logScrollRef.current && !logMinimized) {
+      logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight;
+    }
+  }, [displayLogs.length, logMinimized]);
 
   useEffect(() => {
     if (containerRef.current && !gameRef.current) {
@@ -278,32 +292,59 @@ export default function App() {
             )}
           </div>
 
-          {/* Side Log */}
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-72 h-[60vh] bg-black/40 backdrop-blur-md border-l border-white/10 p-4 pointer-events-auto flex flex-col overflow-hidden">
-            <div className="text-[0.6rem] text-gray-500 uppercase tracking-widest mb-4 border-b border-white/10 pb-2">Interaction Log</div>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin">
-              {gameState.logs.map((log, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="text-[0.7rem] leading-relaxed text-gray-300 font-mono"
-                >
-                  <span className="text-[#00f2ff] mr-2">»</span>
-                  {log}
-                </motion.div>
-              ))}
-              <div id="log-bottom" />
-            </div>
-            
-            {/* Force Skip Button */}
+          {/* Side Log — minimizable; shows only recent entries until game over */}
+          {logMinimized ? (
             <button
-              onClick={handleForceSkip}
-              className="mt-4 px-4 py-2 bg-white/5 border border-white/10 hover:border-[#ff0044] hover:text-[#ff0044] transition-all text-[0.6rem] tracking-widest uppercase font-bold"
+              type="button"
+              onClick={() => setLogMinimized(false)}
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-24 bg-black/40 backdrop-blur-md border-l border-white/10 pointer-events-auto flex flex-col items-center justify-center gap-1 hover:bg-black/60 transition-colors"
+              title="Expand interaction log"
             >
-              Skip Interaction
+              <span className="text-[0.5rem] text-gray-500 uppercase tracking-widest [writing-mode:vertical] rotate-180">Log</span>
+              <span className="text-[0.55rem] text-[#00f2ff]/80">{gameState.logs.length}</span>
             </button>
-          </div>
+          ) : (
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-72 h-[60vh] bg-black/40 backdrop-blur-md border-l border-white/10 p-4 pointer-events-auto flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between gap-2 mb-4 border-b border-white/10 pb-2 shrink-0">
+                <span className="text-[0.6rem] text-gray-500 uppercase tracking-widest">Interaction Log</span>
+                <button
+                  type="button"
+                  onClick={() => setLogMinimized(true)}
+                  className="text-gray-500 hover:text-gray-300 p-1 transition-colors"
+                  title="Minimize log"
+                  aria-label="Minimize log"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                </button>
+              </div>
+              <div ref={logScrollRef} className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin min-h-0">
+                {displayLogs.map((log, i) => {
+                  const globalIndex = gameState?.currentPhase === Phase.GAME_OVER ? i : (gameState?.logs?.length ?? 0) - displayLogs.length + i;
+                  return (
+                    <motion.div
+                      key={`log-${globalIndex}`}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="text-[0.7rem] leading-relaxed text-gray-300 font-mono"
+                    >
+                      <span className="text-[#00f2ff] mr-2">»</span>
+                      {log}
+                    </motion.div>
+                  );
+                })}
+                <div id="log-bottom" />
+              </div>
+              {gameState.currentPhase !== Phase.GAME_OVER && gameState.logs.length > LOG_RECENT_COUNT && (
+                <div className="text-[0.55rem] text-gray-600 mt-1 shrink-0">Showing last {LOG_RECENT_COUNT} of {gameState.logs.length} · full log at game end</div>
+              )}
+              <button
+                onClick={handleForceSkip}
+                className="mt-4 px-4 py-2 bg-white/5 border border-white/10 hover:border-[#ff0044] hover:text-[#ff0044] transition-all text-[0.6rem] tracking-widest uppercase font-bold shrink-0"
+              >
+                Skip Interaction
+              </button>
+            </div>
+          )}
 
           {/* Small-screen only: magnified card preview over the log when hovering a card */}
           {gameState.hoveredCard && (

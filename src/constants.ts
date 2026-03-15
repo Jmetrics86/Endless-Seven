@@ -58,7 +58,10 @@ export const GAME_CONSTANTS = {
   SLOT_SPACING: 3.8,
   CARD_W: 2.2,
   CARD_H: 3.2,
-  TABLE_SIZE: 400
+  TABLE_SIZE: 400,
+  /** Play area table surface (sits on floor under seals/zones). */
+  TABLE_PLAY_WIDTH: 48,
+  TABLE_PLAY_DEPTH: 20
 };
 
 export const GAME_VERSION = "v0.1.3";

@@ -20,6 +20,22 @@ import { AbilityManager } from './AbilityManager';
 import { PhaseManager } from './PhaseManager';
 import { IGameController } from './interfaces';
 
+/** Temporary: zone/label tuning. Remove ZoneTuningGui and use final values in createPile/setupPiles when done. */
+export interface ZoneTuningParams {
+  labelWidth: number;
+  labelHeight: number;
+  labelOffsetZ: number;
+  deckX: number;
+  deckZ: number;
+  deckY: number;
+  limboX: number;
+  limboZ: number;
+  limboY: number;
+  graveX: number;
+  graveZ: number;
+  graveY: number;
+}
+
 export class GameController implements IGameController {
   public sceneManager: SceneManager;
   private inputHandler: InputHandler;
@@ -47,6 +63,10 @@ export class GameController implements IGameController {
   public enemyGraveyardMesh!: THREE.Group;
   private slotMeshes: THREE.Mesh[] = [];
   private floorMesh!: THREE.Mesh;
+  private tableMesh!: THREE.Mesh;
+  /** Spotlights over table (red and blue hues). */
+  public spotLightRed!: THREE.SpotLight;
+  public spotLightBlue!: THREE.SpotLight;
   /** Materials for deck pile layers only (card back texture when loaded). */
   private pileCardBackMaterials: THREE.MeshBasicMaterial[] = [];
   /** Meshes used for zone hover detection (Limbo/Graveyard base planes). */
@@ -66,6 +86,22 @@ export class GameController implements IGameController {
   public uiManager: UIManager;
   public abilityManager: AbilityManager;
   public phaseManager: PhaseManager;
+
+  /** Zone/label layout (final values from zone tuning). */
+  public zoneTuningParams: ZoneTuningParams = {
+    labelWidth: 3.5,
+    labelHeight: 1.75,
+    labelOffsetZ: 2.8,
+    deckX: -15.4,
+    deckZ: 6,
+    deckY: 0.2,
+    limboX: 15.4,
+    limboZ: 6,
+    limboY: 0.05,
+    graveX: 19.4,
+    graveZ: 6,
+    graveY: 0.05
+  };
 
   public onStateChange: (state: GameState) => void = () => {};
 
@@ -138,44 +174,101 @@ export class GameController implements IGameController {
     this.floorMesh.receiveShadow = true;
     this.sceneManager.scene.add(this.floorMesh);
 
+    // Light gray table surface for the play area (seals, deck, limbo, grave)
+    const { TABLE_PLAY_WIDTH, TABLE_PLAY_DEPTH } = GAME_CONSTANTS;
+    this.tableMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(TABLE_PLAY_WIDTH, TABLE_PLAY_DEPTH),
+      new THREE.MeshPhongMaterial({ color: colors.table, shininess: 30 })
+    );
+    this.tableMesh.rotation.x = -Math.PI / 2;
+    this.tableMesh.position.y = 0.01;
+    this.tableMesh.receiveShadow = true;
+    this.sceneManager.scene.add(this.tableMesh);
+
+    // Spotlights pointed down at the table (red and blue hues) – tunable via SceneTuningGui
+    const spotRedTarget = new THREE.Object3D();
+    spotRedTarget.position.set(0, 0, 0);
+    this.sceneManager.scene.add(spotRedTarget);
+    // Pulled out and more diffused: wider angle (45°), higher penumbra (0.65), farther positions
+    this.spotLightRed = new THREE.SpotLight(0xcc4444, 4000, 55, Math.PI / 4, 0.65);
+    this.spotLightRed.position.set(-16, 24, 0);
+    this.spotLightRed.target = spotRedTarget;
+    this.spotLightRed.castShadow = true;
+    this.sceneManager.scene.add(this.spotLightRed);
+
+    const spotBlueTarget = new THREE.Object3D();
+    spotBlueTarget.position.set(0, 0, 0);
+    this.sceneManager.scene.add(spotBlueTarget);
+    this.spotLightBlue = new THREE.SpotLight(0x4444cc, 4000, 55, Math.PI / 4, 0.65);
+    this.spotLightBlue.position.set(20, 24, 0);
+    this.spotLightBlue.target = spotBlueTarget;
+    this.spotLightBlue.castShadow = true;
+    this.sceneManager.scene.add(this.spotLightBlue);
+
     this.setupPiles();
   }
 
   private setupPiles() {
-    const startX = -(GAME_CONSTANTS.SEVEN - 1) * GAME_CONSTANTS.SLOT_SPACING / 2;
-    const deckOffset = startX - 4;
-    const limboOffset = (startX + (GAME_CONSTANTS.SEVEN - 1) * GAME_CONSTANTS.SLOT_SPACING) + 4;
-
-    this.playerDeckMesh = this.createPile("DECK", 0x00f2ff);
-    this.playerDeckMesh.position.set(deckOffset, 0.2, 6);
+    const p = this.zoneTuningParams;
+    this.playerDeckMesh = this.createPile('DECK');
+    this.playerDeckMesh.position.set(p.deckX, p.deckY, p.deckZ);
     this.sceneManager.scene.add(this.playerDeckMesh);
 
-    this.enemyDeckMesh = this.createPile("DECK", 0xff0044);
-    this.enemyDeckMesh.position.set(deckOffset, 0.2, -6);
+    this.enemyDeckMesh = this.createPile('DECK');
+    this.enemyDeckMesh.position.set(p.deckX, p.deckY, -p.deckZ);
     this.sceneManager.scene.add(this.enemyDeckMesh);
 
-    this.playerLimboMesh = this.createPile('LIMBO', 0xcccccc, 2);
-    this.playerLimboMesh.position.set(limboOffset, 0.05, 6);
+    this.playerLimboMesh = this.createPile('LIMBO');
+    this.playerLimboMesh.position.set(p.limboX, p.limboY, p.limboZ);
     this.sceneManager.scene.add(this.playerLimboMesh);
     this.registerZoneHoverMesh(this.playerLimboMesh, 'playerLimbo');
 
-    this.enemyLimboMesh = this.createPile('LIMBO', 0xcccccc, 2);
-    this.enemyLimboMesh.position.set(limboOffset, 0.05, -6);
+    this.enemyLimboMesh = this.createPile('LIMBO');
+    this.enemyLimboMesh.position.set(p.limboX, p.limboY, -p.limboZ);
     this.sceneManager.scene.add(this.enemyLimboMesh);
     this.registerZoneHoverMesh(this.enemyLimboMesh, 'enemyLimbo');
 
-    const graveyardOffset = limboOffset + 4;
-    this.playerGraveyardMesh = this.createPile('GRAVE', 0x888888, 2);
-    this.playerGraveyardMesh.position.set(graveyardOffset, 0.05, 6);
+    this.playerGraveyardMesh = this.createPile('GRAVE');
+    this.playerGraveyardMesh.position.set(p.graveX, p.graveY, p.graveZ);
     this.sceneManager.scene.add(this.playerGraveyardMesh);
     this.registerZoneHoverMesh(this.playerGraveyardMesh, 'playerGraveyard');
 
-    this.enemyGraveyardMesh = this.createPile('GRAVE', 0x888888, 2);
-    this.enemyGraveyardMesh.position.set(graveyardOffset, 0.05, -6);
+    this.enemyGraveyardMesh = this.createPile('GRAVE');
+    this.enemyGraveyardMesh.position.set(p.graveX, p.graveY, -p.graveZ);
     this.sceneManager.scene.add(this.enemyGraveyardMesh);
     this.registerZoneHoverMesh(this.enemyGraveyardMesh, 'enemyGraveyard');
 
     this.loadPileCardBackTexture();
+  }
+
+  /** Temporary: apply zone tuning params to existing piles (positions + label size/offset). Call after changing zoneTuningParams. */
+  public applyZoneTuning(): void {
+    const p = this.zoneTuningParams;
+    const piles: { group: THREE.Group; zSign: number }[] = [
+      { group: this.playerDeckMesh, zSign: 1 },
+      { group: this.enemyDeckMesh, zSign: -1 },
+      { group: this.playerLimboMesh, zSign: 1 },
+      { group: this.enemyLimboMesh, zSign: -1 },
+      { group: this.playerGraveyardMesh, zSign: 1 },
+      { group: this.enemyGraveyardMesh, zSign: -1 }
+    ];
+    const posByType: Record<string, { x: number; y: number; z: number }> = {
+      deck: { x: p.deckX, y: p.deckY, z: p.deckZ },
+      limbo: { x: p.limboX, y: p.limboY, z: p.limboZ },
+      grave: { x: p.graveX, y: p.graveY, z: p.graveZ }
+    };
+    const types: ('deck' | 'limbo' | 'grave')[] = ['deck', 'deck', 'limbo', 'limbo', 'grave', 'grave'];
+    piles.forEach(({ group, zSign }, i) => {
+      const pos = posByType[types[i]];
+      group.position.set(pos.x, pos.y, zSign * pos.z);
+      const label = group.getObjectByName('zoneLabel') as THREE.Mesh | undefined;
+      if (label && label.geometry) {
+        const oldGeo = label.geometry;
+        label.geometry = new THREE.PlaneGeometry(p.labelWidth, p.labelHeight);
+        oldGeo.dispose();
+        label.position.z = p.labelOffsetZ;
+      }
+    });
   }
 
   private registerZoneHoverMesh(pileGroup: THREE.Group, zone: 'playerLimbo' | 'enemyLimbo' | 'playerGraveyard' | 'enemyGraveyard') {
@@ -186,8 +279,9 @@ export class GameController implements IGameController {
     }
   }
 
-  private createPile(type: 'DECK' | 'LIMBO' | 'GRAVE', labelColor: number, labelOffsetZ?: number): THREE.Group {
+  private createPile(type: 'DECK' | 'LIMBO' | 'GRAVE'): THREE.Group {
     const colors = ENV_THEME_COLORS.dark;
+    const p = this.zoneTuningParams;
     const group = new THREE.Group();
     const base = new THREE.Mesh(
       new THREE.BoxGeometry(GAME_CONSTANTS.CARD_W + 0.3, 0.1, GAME_CONSTANTS.CARD_H + 0.3),
@@ -215,7 +309,8 @@ export class GameController implements IGameController {
       }
     }
 
-    const text = type === 'GRAVE' ? 'Grave' : type;
+    // All zone labels: same gray style and uppercase text (DECK, LIMBO, GRAVE); size/offset from zoneTuningParams
+    const labelGray = 0xcccccc;
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 128;
@@ -223,18 +318,17 @@ export class GameController implements IGameController {
     ctx.fillStyle = 'white';
     ctx.font = 'bold 44px Cinzel';
     ctx.textAlign = 'center';
-    ctx.fillText(text, 128, 48);
+    ctx.fillText(type, 128, 48);
 
     const tex = new THREE.CanvasTexture(canvas);
     const label = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.5, 1.75),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, color: labelColor })
+      new THREE.PlaneGeometry(p.labelWidth, p.labelHeight),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, color: labelGray })
     );
+    label.name = 'zoneLabel';
     label.rotation.x = -Math.PI / 2;
-    label.position.y = isDeck ? 0.8 : 0.06;
-    if (labelOffsetZ != null) {
-      label.position.z = labelOffsetZ;
-    }
+    label.position.y = 0.06;
+    label.position.z = p.labelOffsetZ;
     group.add(label);
 
     return group;
@@ -270,6 +364,7 @@ export class GameController implements IGameController {
     this.sceneManager.setTheme(theme);
 
     (this.floorMesh.material as THREE.MeshPhongMaterial).color.setHex(colors.floor);
+    (this.tableMesh.material as THREE.MeshPhongMaterial).color.setHex(colors.table);
 
     for (const slot of this.slotMeshes) {
       const mat = slot.material as THREE.MeshBasicMaterial;
