@@ -663,14 +663,74 @@ export class GameController implements IGameController {
       if (target) this.claimSeal(target.index, Alignment.LIGHT, { type: 'ability', cardName: 'Martyr' });
     }
 
-    gsap.to(card.mesh.position, {
+    const limboLanding = {
       x: mesh.position.x + (Math.random() - 0.5),
       y: 0.2 + (limbo.length * 0.05),
-      z: mesh.position.z + (Math.random() - 0.5),
-      duration: 0.8,
-      onComplete: () => this.updateLimboGraveyardVisibility()
+      z: mesh.position.z + (Math.random() - 0.5)
+    };
+    const settleInLimbo = () => {
+      gsap.to(card.mesh.position, {
+        x: limboLanding.x,
+        y: limboLanding.y,
+        z: limboLanding.z,
+        duration: 0.7,
+        ease: "power2.inOut",
+        onComplete: () => this.updateLimboGraveyardVisibility()
+      });
+      gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.7, ease: "power2.out" });
+      gsap.to(card.mesh.scale, { x: 1, y: 1, z: 1, duration: 0.2, ease: "power2.out" });
+    };
+
+    if (killedBy?.cause === 'combat') {
+      this.animateCombatKnockback(card, isEnemy, mesh, settleInLimbo);
+    } else {
+      settleInLimbo();
+    }
+  }
+
+  private animateCombatKnockback(card: CardEntity, isEnemy: boolean, destinationMesh: THREE.Group, onTeleported: () => void) {
+    const startRotY = card.mesh.rotation.y;
+    const zDirection = isEnemy ? -1 : 1;
+    const lateralDirection = card.mesh.position.x === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(card.mesh.position.x);
+    const knockback = {
+      x: card.mesh.position.x + (lateralDirection * 2.4),
+      y: card.mesh.position.y + 3.2,
+      z: card.mesh.position.z + (zDirection * 11.5)
+    };
+
+    const tl = gsap.timeline({
+      onComplete: () => {
+        card.mesh.position.set(
+          destinationMesh.position.x + (Math.random() - 0.5) * 1.4,
+          4.8,
+          destinationMesh.position.z + (Math.random() - 0.5) * 1.4
+        );
+        card.mesh.rotation.set(0, startRotY, 0);
+        onTeleported();
+      }
     });
-    gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.8 });
+
+    tl.to(card.mesh.position, {
+      x: knockback.x,
+      y: knockback.y,
+      z: knockback.z,
+      duration: 0.45,
+      ease: "power2.out"
+    });
+    tl.to(card.mesh.rotation, {
+      x: card.mesh.rotation.x + (Math.PI * 1.7),
+      y: startRotY + (Math.PI * 0.45 * lateralDirection),
+      z: card.mesh.rotation.z + (Math.PI * 0.55 * zDirection),
+      duration: 0.45,
+      ease: "power2.out"
+    }, "<");
+    tl.to(card.mesh.scale, {
+      x: 0.9,
+      y: 0.9,
+      z: 0.9,
+      duration: 0.24,
+      ease: "power1.out"
+    }, "<");
   }
 
   public async claimSeal(
