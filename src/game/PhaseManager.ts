@@ -637,6 +637,7 @@ export class PhaseManager {
     const isAProtected = this.controller.abilityManager.isProtected(attacker);
     const isDProtected = this.controller.abilityManager.isProtected(defender);
     let stymied = false;
+    await this.playCombatClashAnimation(attacker, defender);
 
     const elderAttacker = attacker.data.name === "Elder";
     const elderDefender = defender.data.name === "Elder";
@@ -719,6 +720,99 @@ export class PhaseManager {
 
     await new Promise(r => setTimeout(r, 500));
     return stymied;
+  }
+
+  private async playCombatClashAnimation(attacker: CardEntity, defender: CardEntity): Promise<void> {
+    const attackerStart = {
+      x: attacker.mesh.position.x,
+      y: attacker.mesh.position.y,
+      z: attacker.mesh.position.z
+    };
+    const defenderStart = {
+      x: defender.mesh.position.x,
+      y: defender.mesh.position.y,
+      z: defender.mesh.position.z
+    };
+
+    const mid = {
+      x: (attackerStart.x + defenderStart.x) / 2,
+      z: (attackerStart.z + defenderStart.z) / 2
+    };
+    const rawDx = defenderStart.x - attackerStart.x;
+    const rawDz = defenderStart.z - attackerStart.z;
+    const len = Math.hypot(rawDx, rawDz);
+    const nx = len > 0.001 ? rawDx / len : 0;
+    const nz = len > 0.001 ? rawDz / len : (attacker.data.isEnemy ? 1 : -1);
+    const impactOffset = 0.3;
+    const liftY = Math.max(attackerStart.y, defenderStart.y) + 1.2;
+
+    const attackerImpact = {
+      x: mid.x - (nx * impactOffset),
+      y: liftY + 0.35,
+      z: mid.z - (nz * impactOffset)
+    };
+    const defenderImpact = {
+      x: mid.x + (nx * impactOffset),
+      y: liftY + 0.35,
+      z: mid.z + (nz * impactOffset)
+    };
+
+    const gsapWithTimeline = gsap as typeof gsap & {
+      timeline?: (vars?: { onComplete?: () => void }) => {
+        to: (...args: unknown[]) => unknown;
+      };
+    };
+    if (typeof gsapWithTimeline.timeline !== 'function') {
+      // Test environments can mock gsap without timelines and use plain object meshes.
+      // In that case, skip the cinematic animation entirely while keeping battle logic intact.
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      const tl = gsapWithTimeline.timeline!({ onComplete: resolve });
+      tl.to([attacker.mesh.position, defender.mesh.position], {
+        y: liftY,
+        duration: 0.34,
+        ease: "power2.out"
+      });
+      tl.to(attacker.mesh.position, {
+        x: attackerImpact.x,
+        y: attackerImpact.y,
+        z: attackerImpact.z,
+        duration: 0.28,
+        ease: "power3.in"
+      });
+      tl.to(defender.mesh.position, {
+        x: defenderImpact.x,
+        y: defenderImpact.y,
+        z: defenderImpact.z,
+        duration: 0.28,
+        ease: "power3.in"
+      }, "<");
+      tl.to([attacker.mesh.scale, defender.mesh.scale], {
+        x: 1.08,
+        y: 1.08,
+        z: 1.08,
+        duration: 0.14,
+        repeat: 1,
+        yoyo: true,
+        ease: "power2.inOut"
+      }, "<");
+      tl.to(attacker.mesh.position, {
+        x: attackerStart.x,
+        y: attackerStart.y,
+        z: attackerStart.z,
+        duration: 0.34,
+        ease: "power2.out"
+      });
+      tl.to(defender.mesh.position, {
+        x: defenderStart.x,
+        y: defenderStart.y,
+        z: defenderStart.z,
+        duration: 0.34,
+        ease: "power2.out"
+      }, "<");
+    });
   }
 
   private async cleanupEndOfRoundEffects() {
