@@ -673,12 +673,12 @@ export class GameController implements IGameController {
         x: limboLanding.x,
         y: limboLanding.y,
         z: limboLanding.z,
-        duration: 0.7,
+        duration: 0.9,
         ease: "power2.inOut",
         onComplete: () => this.updateLimboGraveyardVisibility()
       });
-      gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.7, ease: "power2.out" });
-      gsap.to(card.mesh.scale, { x: 1, y: 1, z: 1, duration: 0.2, ease: "power2.out" });
+      gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.9, ease: "power2.out" });
+      gsap.to(card.mesh.scale, { x: 1, y: 1, z: 1, duration: 0.3, ease: "power2.out" });
     };
 
     if (killedBy?.cause === 'combat') {
@@ -698,7 +698,17 @@ export class GameController implements IGameController {
       z: card.mesh.position.z + (zDirection * 11.5)
     };
 
-    const tl = gsap.timeline({
+    const gsapWithTimeline = gsap as typeof gsap & {
+      timeline?: (vars?: { onComplete?: () => void }) => {
+        to: (...args: unknown[]) => unknown;
+      };
+    };
+    if (typeof gsapWithTimeline.timeline !== 'function') {
+      onTeleported();
+      return;
+    }
+
+    const tl = gsapWithTimeline.timeline!({
       onComplete: () => {
         card.mesh.position.set(
           destinationMesh.position.x + (Math.random() - 0.5) * 1.4,
@@ -714,21 +724,21 @@ export class GameController implements IGameController {
       x: knockback.x,
       y: knockback.y,
       z: knockback.z,
-      duration: 0.45,
+      duration: 0.72,
       ease: "power2.out"
     });
     tl.to(card.mesh.rotation, {
       x: card.mesh.rotation.x + (Math.PI * 1.7),
       y: startRotY + (Math.PI * 0.45 * lateralDirection),
       z: card.mesh.rotation.z + (Math.PI * 0.55 * zDirection),
-      duration: 0.45,
+      duration: 0.72,
       ease: "power2.out"
     }, "<");
     tl.to(card.mesh.scale, {
       x: 0.9,
       y: 0.9,
       z: 0.9,
-      duration: 0.24,
+      duration: 0.32,
       ease: "power1.out"
     }, "<");
   }

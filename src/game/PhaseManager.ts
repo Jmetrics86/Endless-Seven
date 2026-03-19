@@ -757,32 +757,43 @@ export class PhaseManager {
       z: mid.z + (nz * impactOffset)
     };
 
+    const gsapWithTimeline = gsap as typeof gsap & {
+      timeline?: (vars?: { onComplete?: () => void }) => {
+        to: (...args: unknown[]) => unknown;
+      };
+    };
+    if (typeof gsapWithTimeline.timeline !== 'function') {
+      // Test environments can mock gsap without timelines and use plain object meshes.
+      // In that case, skip the cinematic animation entirely while keeping battle logic intact.
+      return;
+    }
+
     await new Promise<void>((resolve) => {
-      const tl = gsap.timeline({ onComplete: resolve });
+      const tl = gsapWithTimeline.timeline!({ onComplete: resolve });
       tl.to([attacker.mesh.position, defender.mesh.position], {
         y: liftY,
-        duration: 0.2,
+        duration: 0.34,
         ease: "power2.out"
       });
       tl.to(attacker.mesh.position, {
         x: attackerImpact.x,
         y: attackerImpact.y,
         z: attackerImpact.z,
-        duration: 0.16,
+        duration: 0.28,
         ease: "power3.in"
       });
       tl.to(defender.mesh.position, {
         x: defenderImpact.x,
         y: defenderImpact.y,
         z: defenderImpact.z,
-        duration: 0.16,
+        duration: 0.28,
         ease: "power3.in"
       }, "<");
       tl.to([attacker.mesh.scale, defender.mesh.scale], {
         x: 1.08,
         y: 1.08,
         z: 1.08,
-        duration: 0.09,
+        duration: 0.14,
         repeat: 1,
         yoyo: true,
         ease: "power2.inOut"
@@ -791,14 +802,14 @@ export class PhaseManager {
         x: attackerStart.x,
         y: attackerStart.y,
         z: attackerStart.z,
-        duration: 0.2,
+        duration: 0.34,
         ease: "power2.out"
       });
       tl.to(defender.mesh.position, {
         x: defenderStart.x,
         y: defenderStart.y,
         z: defenderStart.z,
-        duration: 0.2,
+        duration: 0.34,
         ease: "power2.out"
       }, "<");
     });
