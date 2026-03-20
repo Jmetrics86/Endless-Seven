@@ -157,11 +157,23 @@ export class PhaseManager {
     if ((pHaste || eHaste) && !pCard?.data.cannotBattleOrBeBattled && !eCard?.data.cannotBattleOrBeBattled) {
       this.controller.updateState({ phaseStep: "Step 0: Haste Strike" });
       // Champion must be battled first (same priority as Step C: Combat); only then slot vs slot.
+      // Visual rule: if we are about to battle while cards are still face-down, reveal them first
+      // (but do NOT set `data.faceUp=true`, so flip abilities still trigger later in Step A/B).
+      const revealForCombat = async (...cards: (CardEntity | null | undefined)[]) => {
+        const toReveal = cards.filter((c): c is CardEntity => !!c && !c.data.faceUp);
+        if (toReveal.length === 0) return;
+        toReveal.forEach((c) => gsap.to(c.mesh.rotation, { x: 0, duration: 0.35 }));
+        await new Promise((r) => setTimeout(r, 420));
+      };
+
       if (pCard && seal.champion && seal.champion.data.isEnemy) {
+        await revealForCombat(pCard, seal.champion);
         await this.controller.handleBattle(pCard, seal.champion, idx, true);
       } else if (eCard && seal.champion && !seal.champion.data.isEnemy) {
+        await revealForCombat(eCard, seal.champion);
         await this.controller.handleBattle(eCard, seal.champion, idx, true);
       } else if (pCard && eCard) {
+        await revealForCombat(pCard, eCard);
         await this.controller.handleBattle(pCard, eCard, idx, false);
       }
       pCard = this.controller.playerBattlefield[idx];
@@ -644,6 +656,105 @@ export class PhaseManager {
       this.controller.abilityManager.returnCreatureToOwnerDeck(loser);
     };
 
+    const playCombatSmashWinnerLoser = async (winner: CardEntity, loser: CardEntity): Promise<void> => {
+      const w0 = { x: winner.mesh.position.x, y: winner.mesh.position.y, z: winner.mesh.position.z };
+      const l0 = { x: loser.mesh.position.x, y: loser.mesh.position.y, z: loser.mesh.position.z };
+      const elevate = 0.85;
+      const bringFraction = 0.35; // move each card toward the midpoint
+
+      const impactZWinner = w0.z + (l0.z - w0.z) * bringFraction;
+      const impactZLoser = l0.z + (w0.z - l0.z) * bringFraction;
+
+      const dx = l0.x - w0.x;
+      const dz = l0.z - w0.z;
+      const dist = Math.sqrt(dx * dx + dz * dz) || 1;
+      const dirX = dx / dist;
+      const dirZ = dz / dist;
+
+      const throwDist = 18;
+      const knockX = l0.x + dirX * throwDist;
+      const knockZ = l0.z + dirZ * throwDist;
+      const knockY = l0.y + 0.35;
+
+      const wScale = (winner.mesh as any).scale;
+      const lScale = (loser.mesh as any).scale;
+      const lRot = (loser.mesh as any).rotation;
+
+      // Lift both up and bring together
+      gsap.to(winner.mesh.position, { y: w0.y + elevate, z: impactZWinner, duration: 0.18, ease: 'power2.out' });
+      gsap.to(loser.mesh.position, { y: l0.y + elevate, z: impactZLoser, duration: 0.18, ease: 'power2.out' });
+
+      // Optional "smash" scale pulse (skip in unit tests where mock cards don't have scale)
+      if (wScale && lScale && typeof wScale.x === 'number' && typeof lScale.x === 'number') {
+        gsap.to(wScale, { x: wScale.x * 1.15, y: wScale.y * 1.15, z: wScale.z * 1.15, duration: 0.12, ease: 'power2.out', delay: 0.12 });
+        gsap.to(lScale, { x: lScale.x * 1.15, y: lScale.y * 1.15, z: lScale.z * 1.15, duration: 0.12, ease: 'power2.out', delay: 0.12 });
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          // Winner drops back to original slot; loser gets knocked away
+          gsap.to(winner.mesh.position, { y: w0.y, z: w0.z, duration: 0.22, ease: 'power2.inOut' });
+          gsap.to(loser.mesh.position, { x: knockX, y: knockY, z: knockZ, duration: 0.34, ease: 'power3.in' });
+          if (lRot && typeof lRot.y === 'number') {
+            gsap.to(lRot, { y: Math.random() * 0.6, z: Math.random() * 0.2, duration: 0.34, ease: 'power3.in' });
+          }
+
+          // Total approx: 0.22 drop + 0.34 knock (triggered at ~0.22)
+          setTimeout(() => resolve(), 360);
+        }, 220);
+      });
+    };
+
+    const playCombatSmashMutual = async (a: CardEntity, d: CardEntity): Promise<void> => {
+      const a0 = { x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z };
+      const d0 = { x: d.mesh.position.x, y: d.mesh.position.y, z: d.mesh.position.z };
+      const elevate = 0.85;
+      const bringFraction = 0.35;
+
+      const impactZA = a0.z + (d0.z - a0.z) * bringFraction;
+      const impactZD = d0.z + (a0.z - d0.z) * bringFraction;
+
+      const dxA = a0.x - d0.x;
+      const dzA = a0.z - d0.z;
+      const distA = Math.sqrt(dxA * dxA + dzA * dzA) || 1;
+      const dirAX = dxA / distA;
+      const dirAZ = dzA / distA;
+
+      const dxD = d0.x - a0.x;
+      const dzD = d0.z - a0.z;
+      const distD = Math.sqrt(dxD * dxD + dzD * dzD) || 1;
+      const dirDX = dxD / distD;
+      const dirDZ = dzD / distD;
+
+      const throwDist = 16;
+      const knockAX = a0.x + dirAX * throwDist;
+      const knockAZ = a0.z + dirAZ * throwDist;
+      const knockAY = a0.y + 0.35;
+
+      const knockDX = d0.x + dirDX * throwDist;
+      const knockDZ = d0.z + dirDZ * throwDist;
+      const knockDY = d0.y + 0.35;
+
+      const aScale = (a.mesh as any).scale;
+      const dScale = (d.mesh as any).scale;
+
+      gsap.to(a.mesh.position, { y: a0.y + elevate, z: impactZA, duration: 0.18, ease: 'power2.out' });
+      gsap.to(d.mesh.position, { y: d0.y + elevate, z: impactZD, duration: 0.18, ease: 'power2.out' });
+
+      if (aScale && dScale && typeof aScale.x === 'number' && typeof dScale.x === 'number') {
+        gsap.to(aScale, { x: aScale.x * 1.12, y: aScale.y * 1.12, z: aScale.z * 1.12, duration: 0.12, ease: 'power2.out', delay: 0.12 });
+        gsap.to(dScale, { x: dScale.x * 1.12, y: dScale.y * 1.12, z: dScale.z * 1.12, duration: 0.12, ease: 'power2.out', delay: 0.12 });
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          gsap.to(a.mesh.position, { x: knockAX, y: knockAY, z: knockAZ, duration: 0.42, ease: 'power3.in' });
+          gsap.to(d.mesh.position, { x: knockDX, y: knockDY, z: knockDZ, duration: 0.42, ease: 'power3.in' });
+          setTimeout(() => resolve(), 460);
+        }, 220);
+      });
+    };
+
     const wrathDefenderCannotBeDestroyedByAttacker = defender.data.name === "Wrath" && attacker.data.weaknessMarkers > 0;
     const wrathAttackerCannotBeDestroyedByDefender = attacker.data.name === "Wrath" && defender.data.weaknessMarkers > 0;
 
@@ -652,6 +763,7 @@ export class PhaseManager {
         this.controller.addLog(`${defender.data.name} cannot be destroyed by ${attacker.data.name} (attacker has Weakness Markers).`);
         stymied = true;
       } else if (!defender.data.isInvincible && !isDProtected) {
+        await playCombatSmashWinnerLoser(attacker, defender);
         this.controller.abilityManager.handleFinalAct(defender, attacker);
         if (elderAttacker) sendToDeckInstead(defender);
         else this.controller.destroyCard(defender, defender.data.isEnemy, idx, isAgainstChamp, { cardName: attacker.data.name, cause: 'combat' });
@@ -665,6 +777,7 @@ export class PhaseManager {
         this.controller.addLog(`${attacker.data.name} cannot be destroyed by ${defender.data.name} (attacker has Weakness Markers).`);
         stymied = true;
       } else if (!attacker.data.isInvincible && !isAProtected) {
+        await playCombatSmashWinnerLoser(defender, attacker);
         this.controller.abilityManager.handleFinalAct(attacker, defender);
         if (elderDefender) sendToDeckInstead(attacker);
         else this.controller.destroyCard(attacker, attacker.data.isEnemy, idx, false, { cardName: defender.data.name, cause: 'combat' });
@@ -675,6 +788,16 @@ export class PhaseManager {
       }
     } else {
       this.controller.addLog(`Mutual destruction: ${attacker.data.name} and ${defender.data.name}`);
+
+      const attackerWillDie = !wrathAttackerCannotBeDestroyedByDefender && !attacker.data.isInvincible && !isAProtected;
+      const defenderWillDie = !wrathDefenderCannotBeDestroyedByAttacker && !defender.data.isInvincible && !isDProtected;
+
+      if (attackerWillDie || defenderWillDie) {
+        if (attackerWillDie && !defenderWillDie) await playCombatSmashWinnerLoser(defender, attacker);
+        else if (defenderWillDie && !attackerWillDie) await playCombatSmashWinnerLoser(attacker, defender);
+        else await playCombatSmashMutual(attacker, defender);
+      }
+
       if (wrathAttackerCannotBeDestroyedByDefender) {
         this.controller.addLog(`${attacker.data.name} cannot be destroyed (${defender.data.name} has Weakness Markers).`);
         stymied = true;
@@ -740,90 +863,31 @@ export class PhaseManager {
     }
 
     // Resolve Delta's end-of-round sacrifice and buff
-    // Enemy Delta: sacrifice and pick the strongest ally (by effective Power Value) to receive +3
+    // Enemy Delta: sacrifice and pick the strongest ally (by effective Power Value) to receive +3.
+    // If Delta is the strongest target, allow it to buff itself.
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
       const eCard = this.controller.enemyBattlefield[i];
       if (eCard && eCard.data.name === "Delta" && eCard.data.pendingDeltaSacrifice) {
-        this.controller.addLog(`${eCard.data.name} sacrifices itself to empower an ally.`);
+        const enemyAllies = [
+          ...this.controller.enemyBattlefield,
+          ...this.controller.seals.map(s => s.champion)
+        ].filter(c => c !== null) as CardEntity[];
+
+        const effectivePower = (card: CardEntity) =>
+          card.data.power + card.data.powerMarkers - card.data.weaknessMarkers;
+
+        const target = enemyAllies.reduce((best, current) =>
+          effectivePower(current) > effectivePower(best) ? current : best
+        , enemyAllies[0]);
+
+        target.data.powerMarkers += 3;
+        target.updateVisualMarkers();
+        this.controller.addLog(`${target.data.name} receives +3 Power Markers from Delta's sacrifice.`);
+
+        eCard.data.pendingDeltaSacrifice = false;
         this.controller.destroyCard(eCard, true, i, false);
-        const enemyAllies = [...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
-          .filter(c => c !== null) as CardEntity[];
-        if (enemyAllies.length > 0) {
-          const effectivePower = (card: CardEntity) =>
-            card.data.power + card.data.powerMarkers - card.data.weaknessMarkers;
-          const target = enemyAllies.reduce((best, current) =>
-            effectivePower(current) > effectivePower(best) ? current : best
-          , enemyAllies[0]);
-          target.data.markedForDeltaBuff = true;
-        }
       }
     }
-
-    // Player Delta: optional via decision dialog, then wait for player to choose a creature for +3
-    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
-      const pCard = this.controller.playerBattlefield[i];
-      if (pCard && pCard.data.name === "Delta" && pCard.data.pendingDeltaSacrifice) {
-        this.controller.updateState({
-          decisionContext: 'DELTA_SACRIFICE',
-          instructionText: "Use Delta to sacrifice itself and grant +3 Power Markers to an ally?",
-          decisionMessage: "Delta will be sacrificed. You will then choose one creature to receive +3 Power Markers. Use this ability?"
-        });
-
-        const confirmed = await new Promise<boolean>((resolve) => {
-          (this.controller as any).nullifyCallback = resolve;
-        });
-
-        this.controller.updateState({ decisionContext: undefined, decisionMessage: undefined });
-
-        if (confirmed) {
-          this.controller.addLog(`${pCard.data.name} sacrifices itself to empower an ally.`);
-          this.controller.destroyCard(pCard, false, i, false);
-
-          // Zoom out so player can see the board, then wait for them to select a creature for +3
-          this.controller.zoomOut();
-          await new Promise(r => setTimeout(r, 1200)); // Let zoom animation complete
-          this.controller.updateState({
-            currentPhase: Phase.DELTA_BUFF_TARGETING,
-            instructionText: "Select a creature to receive +3 Power Markers from Delta's sacrifice."
-          });
-
-          await new Promise<void>((resolve) => {
-            (this.controller as any).resolutionCallback = resolve;
-          });
-        } else {
-          pCard.data.pendingDeltaSacrifice = false;
-        }
-        break;
-      }
-    }
-
-    // Apply +3 Power Markers to any creature marked by Delta's effect (enemy targets from above)
-    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
-      const pBuff = this.controller.playerBattlefield[i];
-      if (pBuff && pBuff.data.markedForDeltaBuff) {
-        pBuff.data.powerMarkers += 3;
-        pBuff.data.markedForDeltaBuff = false;
-        pBuff.updateVisualMarkers();
-        this.controller.addLog(`${pBuff.data.name} receives +3 Power Markers from Delta's sacrifice.`);
-      }
-      const eBuff = this.controller.enemyBattlefield[i];
-      if (eBuff && eBuff.data.markedForDeltaBuff) {
-        eBuff.data.powerMarkers += 3;
-        eBuff.data.markedForDeltaBuff = false;
-        eBuff.updateVisualMarkers();
-        this.controller.addLog(`${eBuff.data.name} receives +3 Power Markers from Delta's sacrifice.`);
-      }
-    }
-
-    this.controller.seals.forEach((seal) => {
-      const champBuff = seal.champion;
-      if (champBuff && champBuff.data.markedForDeltaBuff) {
-        champBuff.data.powerMarkers += 3;
-        champBuff.data.markedForDeltaBuff = false;
-        champBuff.updateVisualMarkers();
-        this.controller.addLog(`${champBuff.data.name} receives +3 Power Markers from Delta's sacrifice.`);
-      }
-    });
 
     // Noble: End of Turn — +2 Power Marker on this creature
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
@@ -843,6 +907,54 @@ export class PhaseManager {
         this.controller.addLog(`${champ.data.name} gains +2 Power Markers at end of turn.`);
       }
     });
+
+    // Final End-of-Round Optional Abilities (player chooses)
+    // Currently supports Delta's end-of-round sacrifice choice.
+    for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
+      const pCard = this.controller.playerBattlefield[i];
+      if (pCard && pCard.data.name === "Delta" && pCard.data.pendingDeltaSacrifice) {
+        this.controller.updateState({
+          decisionContext: 'DELTA_SACRIFICE',
+          instructionText: "Use Delta to sacrifice itself and grant +3 Power Markers to a creature?",
+          decisionMessage: "Delta will be sacrificed. You will then choose one creature to receive +3 Power Markers. Use this ability?"
+        });
+
+        const confirmed = await new Promise<boolean>((resolve) => {
+          (this.controller as any).nullifyCallback = resolve;
+        });
+
+        this.controller.updateState({ decisionContext: undefined, decisionMessage: undefined });
+
+        if (confirmed) {
+          this.controller.addLog(`${pCard.data.name} sacrifices itself to empower an ally.`);
+
+          // Enter targeting: reward is applied to the chosen card; then GameController destroys Delta.
+          (this.controller as any).pendingDeltaSacrificeSource = pCard;
+          (this.controller as any).pendingDeltaSacrificeSourceIdx = i;
+
+          // Zoom out so player can see the board, then wait for them to select a creature for +3
+          this.controller.zoomOut();
+          await new Promise(r => setTimeout(r, 1200)); // Let zoom animation complete
+          this.controller.updateState({
+            currentPhase: Phase.DELTA_BUFF_TARGETING,
+            instructionText: "Select a creature to receive +3 Power Markers from Delta's sacrifice. (Delta can be selected.)"
+          });
+
+          await new Promise<void>((resolve) => {
+            (this.controller as any).resolutionCallback = resolve;
+          });
+
+          // If the interaction was skipped/canceled, ensure Delta isn't left pending.
+          if ((this.controller as any).pendingDeltaSacrificeSource) {
+            (this.controller as any).pendingDeltaSacrificeSource.data.pendingDeltaSacrifice = false;
+            (this.controller as any).pendingDeltaSacrificeSource = null;
+            (this.controller as any).pendingDeltaSacrificeSourceIdx = -1;
+          }
+        } else {
+          pCard.data.pendingDeltaSacrifice = false;
+        }
+      }
+    }
 
     // Fledgeling: Sacrifice at end of the turn
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {

@@ -83,6 +83,11 @@ export class GameController implements IGameController {
   public sealSelectionCallback: ((idx: number) => void) | null = null;
   public nullifyCallback: ((confirmed: boolean) => void) | null = null;
 
+  // Player Delta: after confirming Delta's end-of-round sacrifice, we enter targeting.
+  // The selected target gets +3 markers, then we destroy the Delta source.
+  public pendingDeltaSacrificeSource: CardEntity | null = null;
+  public pendingDeltaSacrificeSourceIdx: number = -1;
+
   public uiManager: UIManager;
   public abilityManager: AbilityManager;
   public phaseManager: PhaseManager;
@@ -632,6 +637,13 @@ export class GameController implements IGameController {
       this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
       if (this.currentResolvingSealIndex !== -1) this.zoomIn(this.currentResolvingSealIndex);
     }
+
+    // If Delta targeting was pending, treat skip as canceling the sacrifice.
+    if (this.pendingDeltaSacrificeSource) {
+      this.pendingDeltaSacrificeSource.data.pendingDeltaSacrifice = false;
+      this.pendingDeltaSacrificeSource = null;
+      this.pendingDeltaSacrificeSourceIdx = -1;
+    }
   }
 
   public async handleBattle(attacker: CardEntity, defender: CardEntity, idx: number, isAgainstChamp: boolean): Promise<boolean> {
@@ -648,7 +660,8 @@ export class GameController implements IGameController {
     const limbo = isEnemy ? this.enemyLimbo : this.playerLimbo;
     const mesh = isEnemy ? this.enemyLimboMesh : this.playerLimboMesh;
     limbo.push(card);
-    this.entityManager.remove(card);
+    // Card should remain visible/interactive in Limbo/Graveyard, so do not dispose it here.
+    card.data.isActivatingAbility = false;
     
     if (isAgainstChamp) {
       this.seals[idx].champion = null;
@@ -663,14 +676,52 @@ export class GameController implements IGameController {
       if (target) this.claimSeal(target.index, Alignment.LIGHT, { type: 'ability', cardName: 'Martyr' });
     }
 
-    gsap.to(card.mesh.position, {
-      x: mesh.position.x + (Math.random() - 0.5),
-      y: 0.2 + (limbo.length * 0.05),
-      z: mesh.position.z + (Math.random() - 0.5),
-      duration: 0.8,
+    const destX = mesh.position.x + (Math.random() - 0.5);
+    const destY = 0.2 + (limbo.length * 0.05);
+    const destZ = mesh.position.z + (Math.random() - 0.5);
+    const destRotY = Math.random() * 0.5;
+
+    (card as any).setOpacity(1);
+    card.mesh.scale.set(1, 1, 1);
+
+    // Explode (scale up + fade out), travel to Limbo position, then reform (scale from tiny + fade in).
+    const opacityState = { value: 1 };
+    const fadeTo = (value: number) => {
+      opacityState.value = value;
+      (card as any).setOpacity(opacityState.value);
+    };
+    fadeTo(1);
+
+    const tl = gsap.timeline({
       onComplete: () => this.updateLimboGraveyardVisibility()
     });
-    gsap.to(card.mesh.rotation, { x: 0, y: Math.random() * 0.5, z: 0, duration: 0.8 });
+
+    // Explode + fade out at current position
+    tl.to(card.mesh.scale, { x: 1.65, y: 1.65, z: 1.65, duration: 0.18, ease: 'power2.out' }, 0);
+    tl.to(opacityState, {
+      value: 0,
+      duration: 0.14,
+      ease: 'power2.in',
+      onUpdate: () => fadeTo(opacityState.value)
+    }, 0);
+
+    // Travel to Limbo while invisible
+    tl.to(card.mesh.position, { x: destX, y: destY, z: destZ, duration: 0.36, ease: 'power2.inOut' }, 0.07);
+    tl.to(card.mesh.rotation, { x: 0, y: destRotY, z: 0, duration: 0.36, ease: 'power2.inOut' }, 0.07);
+
+    // Reform: tiny then scale up with a pop
+    tl.add(() => {
+      card.mesh.scale.set(0.01, 0.01, 0.01);
+      fadeTo(0);
+    }, '>');
+
+    tl.to(card.mesh.scale, { x: 1, y: 1, z: 1, duration: 0.32, ease: 'back.out(1.6)' }, '>');
+    tl.to(opacityState, {
+      value: 1,
+      duration: 0.26,
+      ease: 'power2.out',
+      onUpdate: () => fadeTo(opacityState.value)
+    }, '>');
   }
 
   public async claimSeal(
@@ -914,6 +965,25 @@ export class GameController implements IGameController {
           card.data.powerMarkers += 3;
           card.updateVisualMarkers();
           this.addLog(`${card.data.name} receives +3 Power Markers from Delta's sacrifice.`);
+
+          // Execute the sacrifice after the player picks the +3 recipient.
+          const deltaSource = this.pendingDeltaSacrificeSource;
+          const deltaIdx = this.pendingDeltaSacrificeSourceIdx;
+          this.pendingDeltaSacrificeSource = null;
+          this.pendingDeltaSacrificeSourceIdx = -1;
+          if (deltaSource) {
+            deltaSource.data.pendingDeltaSacrifice = false;
+            const isEnemy = deltaSource.data.isEnemy;
+            const actualIdx = deltaIdx >= 0
+              ? deltaIdx
+              : isEnemy
+                ? this.enemyBattlefield.indexOf(deltaSource)
+                : this.playerBattlefield.indexOf(deltaSource);
+            if (actualIdx >= 0) {
+              this.destroyCard(deltaSource, isEnemy, actualIdx, false);
+            }
+          }
+
           this.updateState({ currentPhase: Phase.RESOLUTION, instructionText: '' });
           if (this.resolutionCallback) this.resolutionCallback();
           this.resolutionCallback = null;

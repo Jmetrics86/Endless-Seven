@@ -1123,6 +1123,29 @@ describe('Delta – NPC end-of-round +3 buff targeting', () => {
       expect.stringContaining('Seal Champion receives +3 Power Markers from Delta\'s sacrifice.')
     );
   });
+
+  it('NPC Delta can buff itself when it is the only valid target', async () => {
+    const delta = createMockCard({
+      name: 'Delta',
+      power: 3,
+      type: 'Creature',
+      isEnemy: true,
+      faceUp: true,
+      pendingDeltaSacrifice: true,
+      powerMarkers: 0,
+      weaknessMarkers: 0,
+    }) as unknown as CardEntity;
+
+    mock.enemyBattlefield[0] = delta;
+
+    await (mock.phaseManager as any).cleanupEndOfRoundEffects();
+
+    expect(mock.enemyBattlefield[0]).toBeNull();
+    expect(delta.data.powerMarkers).toBe(3);
+    expect(mock.addLog).toHaveBeenCalledWith(
+      expect.stringContaining('Delta receives +3 Power Markers from Delta\'s sacrifice.')
+    );
+  });
 });
 
 describe('AbilityManager – applyAbilityEffect', () => {

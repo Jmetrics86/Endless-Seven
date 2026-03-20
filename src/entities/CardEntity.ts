@@ -388,6 +388,27 @@ export class CardEntity implements GameEntity {
     }
   }
 
+  /** Set opacity on all card materials so card can fade during animations. */
+  public setOpacity(value: number): void {
+    this.mesh.traverse((obj) => {
+      const maybeMat = (obj as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      if (!maybeMat) return;
+
+      const setMat = (m: any) => {
+        if (typeof m.opacity === 'number') {
+          m.transparent = true;
+          m.opacity = value;
+        }
+      };
+
+      if (Array.isArray(maybeMat)) {
+        maybeMat.forEach(setMat);
+      } else {
+        setMat(maybeMat);
+      }
+    });
+  }
+
   public dispose() {
     this.pTex.dispose();
     this.wTex.dispose();
