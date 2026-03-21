@@ -19,6 +19,9 @@ let backTextureLoadPromise: Promise<THREE.Texture> | null = null;
  * wait for the same request instead of getting undefined or starting a duplicate load.
  */
 const faceTextureLoadPromises: Record<string, Promise<THREE.Texture>> = {};
+
+/** Scratch: mesh local +Y axis in world space (for hover lift sign vs table). */
+const _scratchLocalYWorld = new THREE.Vector3();
 /** Resolved face textures by URL so update() can retry applying if the one-time .then() missed. */
 const faceTextureResolvedCache: Record<string, THREE.Texture> = {};
 
@@ -274,6 +277,25 @@ export class CardEntity implements GameEntity {
     this.abilityHalo.position.set(0, 0.13, 0);
     this.abilityHalo.visible = false;
     this.visualLiftRoot.add(this.abilityHalo);
+  }
+
+  /**
+   * Current visual hover offset on the inner lift group (for syncing when rotation changes mid-hover).
+   */
+  public getVisualLiftLocalY(): number {
+    return this.visualLiftRoot.position.y;
+  }
+
+  /**
+   * Whether positive `visualLiftRoot.position.y` moves the card toward world +Y (sky).
+   * Uses live mesh rotation so it stays correct during flip tweens and haste “reveal without faceUp” windows.
+   */
+  public getHoverLiftWorldUpSign(): number {
+    _scratchLocalYWorld.set(0, 1, 0).applyQuaternion(this.mesh.quaternion);
+    const wy = _scratchLocalYWorld.y;
+    if (wy > 0.02) return 1;
+    if (wy < -0.02) return -1;
+    return this.data.faceUp ? 1 : -1;
   }
 
   /** Animate local Y lift for hover (does not touch mesh.position). */

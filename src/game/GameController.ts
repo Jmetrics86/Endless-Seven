@@ -876,9 +876,20 @@ export class GameController implements IGameController {
 
   /** Local Y on CardEntity.visualLiftRoot: hand (tilted) vs flat table vs limbo pile. */
   private static readonly HOVER_LIFT_HAND = 0.52;
-  /** Magnitude for table/limbo; sign depends on faceUp (rotation flips local Y axis). */
+  /** Magnitude for table/limbo; sign from live mesh rotation (see CardEntity.getHoverLiftWorldUpSign). */
   private static readonly HOVER_LIFT_TABLE_MAG = 0.22;
   private static readonly HOVER_LIFT_LIMBO_MAG = 0.14;
+
+  /** Desired visualLiftRoot.position.y for hover (hand uses fixed lift; board/limbo follow quaternion). */
+  private computeHoverLocalY(card: CardEntity): number {
+    if (this.playerHand.includes(card)) {
+      return GameController.HOVER_LIFT_HAND;
+    }
+    const mag = this.playerLimbo.includes(card)
+      ? GameController.HOVER_LIFT_LIMBO_MAG
+      : GameController.HOVER_LIFT_TABLE_MAG;
+    return mag * card.getHoverLiftWorldUpSign();
+  }
 
   private updateCardHoverLift(hovered: CardEntity | null) {
     const sealChampions = this.seals.map((s) => s.champion).filter((c): c is CardEntity => c !== null);
@@ -896,29 +907,31 @@ export class GameController implements IGameController {
       hovered !== this.activeSelection;
 
     const nextTarget = eligible ? hovered : null;
-    if (nextTarget === this.cardHoverLiftTarget) return;
 
-    if (this.cardHoverLiftTarget) {
-      this.cardHoverLiftTarget.resetHoverLift(0.24);
-    }
-    this.cardHoverLiftTarget = nextTarget;
-
-    if (!nextTarget) return;
-
-    let localY: number;
-    if (this.playerHand.includes(nextTarget)) {
-      localY = GameController.HOVER_LIFT_HAND;
-    } else if (this.playerLimbo.includes(nextTarget)) {
-      // Face-up: rotation.x=0, local +Y = world up. Face-down: rotation.x=π, local -Y = world up.
-      const mag = GameController.HOVER_LIFT_LIMBO_MAG;
-      localY = nextTarget.data.faceUp ? mag : -mag;
-    } else {
-      // Table / battlefield / champions: same axis flip when flipped
-      const mag = GameController.HOVER_LIFT_TABLE_MAG;
-      localY = nextTarget.data.faceUp ? mag : -mag;
+    if (!nextTarget) {
+      if (this.cardHoverLiftTarget) {
+        this.cardHoverLiftTarget.resetHoverLift(0.24);
+        this.cardHoverLiftTarget = null;
+      }
+      return;
     }
 
-    nextTarget.tweenHoverLift(localY, 0.3, 'power2.out');
+    const desiredY = this.computeHoverLocalY(nextTarget);
+
+    if (this.cardHoverLiftTarget !== nextTarget) {
+      if (this.cardHoverLiftTarget) {
+        this.cardHoverLiftTarget.resetHoverLift(0.24);
+      }
+      this.cardHoverLiftTarget = nextTarget;
+      nextTarget.tweenHoverLift(desiredY, 0.3, 'power2.out');
+      return;
+    }
+
+    // Same card still hovered: rotation may change during flip / haste reveal while `faceUp` lags — retarget lift.
+    const curY = nextTarget.getVisualLiftLocalY();
+    if (Math.abs(desiredY - curY) > 0.025) {
+      nextTarget.tweenHoverLift(desiredY, 0.14, 'power2.out');
+    }
   }
 
   private clearCardHoverLiftTarget() {
