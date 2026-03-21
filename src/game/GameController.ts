@@ -19,6 +19,7 @@ import { UIManager } from './UIManager';
 import { AbilityManager } from './AbilityManager';
 import { PhaseManager } from './PhaseManager';
 import { IGameController } from './interfaces';
+import { shouldEnemyUseLuna } from './EnemyEasyAI';
 
 /** Temporary: zone/label tuning. Remove ZoneTuningGui and use final values in createPile/setupPiles when done. */
 export interface ZoneTuningParams {
@@ -50,6 +51,8 @@ export class GameController implements IGameController {
   public enemyDeck: CardData[] = [];
   public playerLimbo: CardEntity[] = [];
   public enemyLimbo: CardEntity[] = [];
+  /** Enemy prep cards not placed on the battlefield (mirror of player hand → Limbo). */
+  public enemyPrepRemainder: CardData[] = [];
   /** Cards that participated in battle this round (for Saint Michael Final Act). */
   public cardsThatBattledThisRound: CardEntity[] = [];
   public playerGraveyard: CardEntity[] = [];
@@ -417,8 +420,46 @@ export class GameController implements IGameController {
       this.playerDeck = this.buildDeck(DARK_POOL);
       this.enemyDeck = this.buildDeck(LIGHT_POOL);
     }
+    this.enemyPrepRemainder = [];
     this.updateState({ instructionText: 'Prepare for the cycle.' });
     this.phaseManager.startPrepPhase();
+  }
+
+  /** Spawns remainder prep cards into enemy Limbo before resolution (after player Limbo purge). */
+  public appendEnemyPrepCardsToLimbo(): void {
+    const list = this.enemyPrepRemainder;
+    const n = list.length;
+    this.enemyPrepRemainder = [];
+    if (n === 0) return;
+    const p = this.zoneTuningParams;
+    const baseZ = this.enemyLimboMesh.position.z;
+    const baseX = this.enemyLimboMesh.position.x;
+    for (let i = 0; i < list.length; i++) {
+      const cardData = list[i];
+      const card = new CardEntity(cardData, true, this.state.playerAlignment);
+      this.entityManager.add(card);
+      this.sceneManager.scene.add(card.mesh);
+      card.mesh.position.set(-15, 2, -6);
+      card.mesh.rotation.x = Math.PI;
+      const stackY = 0.2 + this.enemyLimbo.length * 0.05;
+      this.enemyLimbo.push(card);
+      card.applyBackTextureIfNeeded();
+      gsap.to(card.mesh.position, {
+        x: baseX,
+        y: stackY,
+        z: baseZ,
+        duration: 0.55,
+        delay: i * 0.05,
+        ease: 'power2.out',
+        onComplete: () => {
+          card.mesh.rotation.set(0, 0, 0);
+          card.updateVisualMarkers();
+        }
+      });
+    }
+    this.addLog(`Enemy sends ${n} unassigned card(s) to Limbo.`);
+    this.updateState({});
+    this.abilityManager.syncBoardPresencePowerMarkers();
   }
 
   private buildDeck(pool: CardData[]): CardData[] {
@@ -753,7 +794,9 @@ export class GameController implements IGameController {
     if (lunaCard) {
       const isEnemyLuna = lunaCard.data.isEnemy;
       if (isEnemyLuna) {
-        if (Math.random() < 0.5) {
+        const pAlign = this.state.playerAlignment;
+        const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
+        if (shouldEnemyUseLuna(idx, status, this.seals, pAlign, eAlign)) {
           this.abilityManager.moveToGraveyard(lunaCard);
           this.addLog(`Enemy uses Luna from Limbo to nullify the influence change.`);
           return;

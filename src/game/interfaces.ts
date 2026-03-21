@@ -13,6 +13,8 @@ export interface IGameController {
   enemyGraveyard: CardEntity[];
   playerDeck: CardData[];
   enemyDeck: CardData[];
+  /** Unplaced enemy prep draw (same role as cards going to player Limbo after End Prep). */
+  enemyPrepRemainder: CardData[];
   seals: SealEntity[];
   playerLimboMesh: any;
   enemyLimboMesh: any;
@@ -53,6 +55,7 @@ export interface IGameController {
   endPrep(): void;
   startResolution(): Promise<void>;
   resolveSeal(idx: number): Promise<void>;
+  appendEnemyPrepCardsToLimbo(): void;
   forceSkip(): void;
   selectLimboCardForAbility(zone: 'player' | 'enemy', index: number): void;
 }

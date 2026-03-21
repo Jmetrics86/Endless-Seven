@@ -2,6 +2,26 @@ import { CardEntity } from '../entities/CardEntity';
 import { Alignment, Phase } from '../types';
 import { IGameController } from './interfaces';
 import gsap from 'gsap';
+import { GAME_CONSTANTS } from '../constants';
+import {
+  baronSwapImprovesLane,
+  enemyWeaknessScore,
+  harmTargetScore,
+  pickAllotterTarget,
+  pickAvatarFinalActTarget,
+  pickBestAllyPowerTarget,
+  pickBestEnemyWeaknessTarget,
+  pickBestHarmTarget,
+  pickBestLimboCardForEnemyBaronSwap,
+  pickChampionForLord,
+  pickInevitableFollowUp,
+  pickLimboForSentinel,
+  pickMartyrNeutralSeal,
+  pickNephilimSealIndex,
+  pickSealForEnemySealAbility,
+  pickSlothDestroyTarget,
+  shouldEnemyUseFallenOneAgainst,
+} from './EnemyEasyAI';
 
 export class AbilityManager {
   constructor(private controller: IGameController) {}
@@ -45,8 +65,10 @@ export class AbilityManager {
       if (allBoard.length === 0) return;
       const isAI = winner.data.isEnemy;
       if (isAI) {
-        const target = allBoard[Math.floor(Math.random() * allBoard.length)];
-        this.applyAbilityEffect(target, { source: winner, effect: 'destroy_or_marker', targetType: 'any' });
+        const target = pickInevitableFollowUp(winner, allBoard, this.controller.seals);
+        if (target) {
+          this.applyAbilityEffect(target, { source: winner, effect: 'destroy_or_marker', targetType: 'any' });
+        }
         return;
       }
       this.controller.updateState({
@@ -266,10 +288,27 @@ export class AbilityManager {
     }});
   }
 
-  /** Count Horsemen in play for War, Hades, Pestilence (owner's side only). Only flipped cards count. */
+  /** Count Horsemen in play for War, Hades, Death Activate, etc. (owner's side only). Only face-up cards count. */
   public countHorsemenInPlay(isEnemy: boolean): number {
     const all = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
     return all.filter(c => c.data.type === 'Horseman' && c.data.isEnemy === isEnemy).length;
+  }
+
+  /**
+   * Pestilence Flip: "for each Horseman you have in play" — includes face-up Horsemen on that side plus this
+   * Horseman whose Flip is resolving. During Step B, `faceUp` is still false for the flipping lane card until
+   * the end of the step, so `countHorsemenInPlay` alone would miss Pestilence itself.
+   */
+  public countHorsemenForPestilenceFlip(ownerIsEnemy: boolean, flippingSource: CardEntity): number {
+    let n = this.countHorsemenInPlay(ownerIsEnemy);
+    if (
+      flippingSource.data.type === 'Horseman' &&
+      flippingSource.data.isEnemy === ownerIsEnemy &&
+      !flippingSource.data.faceUp
+    ) {
+      n += 1;
+    }
+    return n;
   }
 
   private static readonly BOARD_PRESENCE_NAMES = new Set(['The Spinner', 'Omega', 'Hades']);
@@ -412,27 +451,27 @@ export class AbilityManager {
     let weaknessPool = data.markerWeakness || 0;
 
     if (isAI) {
-      const myUnits = this.controller.enemyBattlefield.filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
-      const enemyUnits = this.controller.playerBattlefield.filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
-      
+      const seals = this.controller.seals;
+      const sourceIsEnemy = card.data.isEnemy;
+      const myBf = sourceIsEnemy ? this.controller.enemyBattlefield : this.controller.playerBattlefield;
+      const theirBf = sourceIsEnemy ? this.controller.playerBattlefield : this.controller.enemyBattlefield;
+      const myUnits = myBf.filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
+      const enemyUnits = theirBf.filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
+
       for (let i = 0; i < powerPool; i++) {
-        if (myUnits.length > 0) {
-          if (!this.isImmuneToAbilities(myUnits[0], card)) {
-            myUnits[0].data.powerMarkers++;
-            myUnits[0].updateVisualMarkers();
-          } else {
-            this.controller.addLog(`${myUnits[0].data.name} is immune to markers from ${card.data.name}`);
-          }
+        const candidates = myUnits.filter((c) => !this.isImmuneToAbilities(c, card));
+        const t = pickBestAllyPowerTarget(candidates, seals);
+        if (t) {
+          t.data.powerMarkers++;
+          t.updateVisualMarkers();
         }
       }
       for (let i = 0; i < weaknessPool; i++) {
-        if (enemyUnits.length > 0) {
-          if (!this.isImmuneToAbilities(enemyUnits[0], card)) {
-            enemyUnits[0].data.weaknessMarkers++;
-            enemyUnits[0].updateVisualMarkers();
-          } else {
-            this.controller.addLog(`${enemyUnits[0].data.name} is immune to markers from ${card.data.name}`);
-          }
+        const candidates = enemyUnits.filter((c) => !this.isImmuneToAbilities(c, card));
+        const t = pickBestEnemyWeaknessTarget(candidates, seals);
+        if (t) {
+          t.data.weaknessMarkers++;
+          t.updateVisualMarkers();
         }
       }
       return Promise.resolve();
@@ -457,8 +496,8 @@ export class AbilityManager {
         .filter(c => c !== null && (c as CardEntity).data.faceUp && (c as CardEntity).data.isChampion) as CardEntity[];
       if (isAI) {
         if (targets.length > 0) {
-          const target = targets[Math.floor(Math.random() * targets.length)];
-          this.applyAbilityEffect(target, { source, effect: data.effect });
+          const target = pickChampionForLord(source, targets, this.controller.seals);
+          if (target) this.applyAbilityEffect(target, { source, effect: data.effect });
         } else {
           this.controller.addLog(`${source.data.name} finds no Champion in play to place on deck.`);
         }
@@ -476,11 +515,12 @@ export class AbilityManager {
       });
     }
     if (data.targetType === 'limbo_creature') {
-      const targets = [...this.controller.playerLimbo, ...this.controller.enemyLimbo];
+      const ownerLimbo = source.data.isEnemy ? this.controller.enemyLimbo : this.controller.playerLimbo;
+      const targets = isAI ? [...ownerLimbo] : [...this.controller.playerLimbo, ...this.controller.enemyLimbo];
       if (isAI) {
         if (targets.length > 0) {
-          const target = targets[Math.floor(Math.random() * targets.length)];
-          this.applyAbilityEffect(target, { source, effect: data.effect });
+          const target = pickLimboForSentinel(targets);
+          if (target) this.applyAbilityEffect(target, { source, effect: data.effect });
         } else {
           this.controller.addLog(`${source.data.name} finds no creature in Limbo to absorb.`);
         }
@@ -509,7 +549,17 @@ export class AbilityManager {
       });
       if (isAI) {
         if (validTargets.length > 0) {
-          const target = validTargets[Math.floor(Math.random() * validTargets.length)];
+          const foes = validTargets.filter((t) => t.data.isEnemy !== source.data.isEnemy);
+          const pool = foes.length > 0 ? foes : validTargets;
+          let target = pool[0];
+          let best = enemyWeaknessScore(target, this.controller.seals);
+          for (let i = 1; i < pool.length; i++) {
+            const sc = enemyWeaknessScore(pool[i], this.controller.seals);
+            if (sc > best) {
+              best = sc;
+              target = pool[i];
+            }
+          }
           this.applyAbilityEffect(target, { source, effect: data.effect, markerWeakness: data.markerWeakness ?? 3 });
         } else {
           this.controller.addLog(`${source.data.name} finds no creature with Power Value ≥ its own to affect.`);
@@ -536,8 +586,38 @@ export class AbilityManager {
       } else {
         targets = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
       }
+      const seals = this.controller.seals;
       if (targets.length > 0) {
-        this.applyAbilityEffect(targets[0], { source, effect: data.effect, markerWeakness: source.data.markerWeakness });
+        const eff = data.effect;
+        let target: CardEntity | null = null;
+        if (eff === 'place_power') {
+          const allies = targets.filter((t) => t.data.isEnemy === source.data.isEnemy);
+          const pool = allies.length > 0 ? allies : targets;
+          target = pickBestAllyPowerTarget(pool, seals);
+        } else if (eff === 'place_weakness' || eff === 'destroy' || eff === 'return') {
+          const foes = targets.filter((t) => t.data.isEnemy !== source.data.isEnemy);
+          const pool = foes.length > 0 ? foes : targets;
+          target = pickBestHarmTarget(source, pool, seals);
+        } else if (eff === 'destroy_marker') {
+          const withPm = targets.filter((t) => t.data.powerMarkers > 0);
+          const withWm = targets.filter((t) => t.data.weaknessMarkers > 0);
+          const foePm = withPm.filter((t) => t.data.isEnemy !== source.data.isEnemy);
+          const foeWm = withWm.filter((t) => t.data.isEnemy !== source.data.isEnemy);
+          if (foePm.length > 0) {
+            target = foePm.reduce((a, b) => (harmTargetScore(source, a, seals) + a.data.powerMarkers * 5 >= harmTargetScore(source, b, seals) + b.data.powerMarkers * 5 ? a : b));
+          } else if (foeWm.length > 0) {
+            target = foeWm.reduce((a, b) => (a.data.weaknessMarkers >= b.data.weaknessMarkers ? a : b));
+          } else if (withPm.length > 0) {
+            target = withPm.reduce((a, b) => (a.data.powerMarkers >= b.data.powerMarkers ? a : b));
+          } else if (withWm.length > 0) {
+            target = withWm[0];
+          }
+        } else {
+          target = targets[0];
+        }
+        if (target) {
+          this.applyAbilityEffect(target, { source, effect: data.effect, markerWeakness: source.data.markerWeakness });
+        }
       } else if (data.effect === 'place_weakness') {
         this.controller.addLog(`${source.data.name} finds no valid creature to place Weakness on.`);
       }
@@ -570,8 +650,10 @@ export class AbilityManager {
       return;
     }
     if (isAI) {
-      const target = validTargets[Math.floor(Math.random() * validTargets.length)];
-      this.applyAbilityEffect(target, { source, effect: 'destroy_creature_with_weakness' });
+      const target = pickSlothDestroyTarget(source, validTargets, this.controller.seals);
+      if (target) {
+        this.applyAbilityEffect(target, { source, effect: 'destroy_creature_with_weakness' });
+      }
       return;
     }
     this.controller.updateState({
@@ -665,44 +747,122 @@ export class AbilityManager {
     }
   }
 
+  /** After End Prep: enemy Baron swaps, then Martyr / Saint Michael / Lilith from Limbo (before new Resolution clears battled list). */
+  public async runEnemyPrepAutomation(): Promise<void> {
+    await this.runEnemyBaronSwapsIfAny();
+    await new Promise((r) => setTimeout(r, 120));
+    const snapshot = [...this.controller.enemyLimbo];
+    for (const card of snapshot) {
+      if (!card.data.isEnemy) continue;
+      if (!this.controller.enemyLimbo.includes(card)) continue;
+      if (card.data.name === 'Martyr') await this.executeEnemyMartyrLimbo(card);
+      else if (card.data.name === 'Saint Michael' || card.data.name === 'Lilith') {
+        await this.executeEnemyAvatarFinalLimbo(card);
+      }
+    }
+    this.syncBoardPresencePowerMarkers();
+    this.controller.updateState({});
+  }
+
+  private async runEnemyBaronSwapsIfAny(): Promise<void> {
+    const enemyLimboMesh = this.controller.enemyLimboMesh as { position: { x: number; z: number } };
+    const baseX = enemyLimboMesh.position.x;
+    const baseZ = enemyLimboMesh.position.z;
+    for (let slot = 0; slot < GAME_CONSTANTS.SEVEN; slot++) {
+      const baron = this.controller.enemyBattlefield[slot];
+      if (!baron || baron.data.name !== 'Baron' || !baron.data.hasSwapAbility) continue;
+      const pool = this.controller.enemyLimbo.filter((c) => c !== baron);
+      const candidate = pickBestLimboCardForEnemyBaronSwap(pool);
+      if (!candidate || !baronSwapImprovesLane(baron, candidate)) continue;
+
+      this.controller.enemyBattlefield[slot] = candidate;
+      const idx = this.controller.enemyLimbo.indexOf(candidate);
+      if (idx < 0) continue;
+      this.controller.enemyLimbo.splice(idx, 1);
+      this.controller.enemyLimbo.push(baron);
+
+      const stackY = 0.2 + (this.controller.enemyLimbo.length - 1) * 0.05;
+      gsap.to(baron.mesh.position, { x: baseX, y: stackY, z: baseZ, duration: 0.45, ease: 'power2.out' });
+      gsap.to(baron.mesh.rotation, { x: 0, y: 0, z: 0, duration: 0.45 });
+
+      gsap.to(candidate.mesh.position, {
+        x: (slot - 3) * GAME_CONSTANTS.SLOT_SPACING,
+        y: 0.1,
+        z: -3.2,
+        duration: 0.45,
+        ease: 'power2.out',
+      });
+      gsap.to(candidate.mesh.rotation, { x: Math.PI, y: 0, z: 0, duration: 0.45 });
+      candidate.applyBackTextureIfNeeded();
+
+      this.controller.addLog(`Enemy Baron swaps with ${candidate.data.name} from Limbo.`);
+      this.syncBoardPresencePowerMarkers();
+      await new Promise((r) => setTimeout(r, 460));
+    }
+  }
+
+  private async executeEnemyMartyrLimbo(card: CardEntity): Promise<void> {
+    if (!this.controller.enemyLimbo.includes(card) || card.data.name !== 'Martyr') return;
+    const seal = pickMartyrNeutralSeal(this.controller.seals);
+    if (!seal) return;
+    await this.controller.claimSeal(seal.index, Alignment.LIGHT, { type: 'ability', cardName: card.data.name });
+    this.moveToGraveyard(card);
+    this.controller.addLog(`Enemy Martyr purifies Seal ${seal.index + 1} from Limbo.`);
+  }
+
+  private async executeEnemyAvatarFinalLimbo(card: CardEntity): Promise<void> {
+    if (!this.controller.enemyLimbo.includes(card)) return;
+    const inPlay = (c: CardEntity) =>
+      this.controller.playerBattlefield.includes(c) ||
+      this.controller.enemyBattlefield.includes(c) ||
+      this.controller.seals.some((s) => s.champion === c);
+    const validTargets = [...new Set(this.controller.cardsThatBattledThisRound)].filter(inPlay);
+    if (validTargets.length === 0) return;
+    const target = pickAvatarFinalActTarget(card, validTargets, this.controller.seals);
+    if (!target) return;
+    this.applyAbilityEffect(target, {
+      source: card,
+      effect: 'saint_michael_destroy',
+      targetType: 'battled',
+      validTargets,
+    });
+    this.controller.addLog(`Enemy ${card.data.name} (Limbo) destroys ${target.data.name} that battled last round.`);
+  }
+
   public async checkNullify(source: CardEntity): Promise<boolean> {
     const isEnemy = source.data.isEnemy;
     const opponentLimbo = isEnemy ? this.controller.playerLimbo : this.controller.enemyLimbo;
-    const fallenOne = opponentLimbo.find(c => c.data.name === "Fallen One");
+    const fallenOne = opponentLimbo.find((c) => c.data.name === 'Fallen One');
+    if (!fallenOne || !opponentLimbo.includes(fallenOne)) return false;
 
-    if (fallenOne) {
-      if (!isEnemy) {
-        // AI check: Enemy has Fallen One in Limbo, should it nullify Player's ability?
-        // Simple AI: always nullify powerful abilities or just random for now
-        if (Math.random() < 0.5) {
-          this.controller.addLog(`Enemy uses Fallen One from Limbo to Nullify ${source.data.name}'s ability!`);
-          this.moveToGraveyard(fallenOne);
-          return true;
-        }
-      } else {
-        // Player check: Player has Fallen One in Limbo, ask if they want to nullify Enemy's ability
-        // For now, I'll use a simple confirmation or just auto-trigger if I can't do UI easily.
-        // The user asked for "a new interface element to be able to trigger abilities from the Limbo Area".
-        // I'll implement a state for this.
-        this.controller.updateState({
-          instructionText: `Use Fallen One from Limbo to Nullify ${source.data.name}?`,
-          currentPhase: Phase.ABILITY_TARGETING,
-          decisionContext: 'FALLEN_ONE',
-          decisionMessage: `Opponent revealed ${source.data.name}. Use Fallen One from your Limbo to nullify its ability? (Fallen One is moved to your Graveyard.)`
-        });
-        
-        const confirmed = await new Promise<boolean>((resolve) => {
-          (this.controller as any).nullifyCallback = resolve;
-        });
-
-        this.controller.updateState({ decisionContext: undefined, decisionMessage: undefined });
-
-        if (confirmed) {
-          this.controller.addLog(`Player uses Fallen One from Limbo to Nullify ${source.data.name}'s ability!`);
-          this.moveToGraveyard(fallenOne);
-          return true;
-        }
+    if (!isEnemy) {
+      if (shouldEnemyUseFallenOneAgainst(source)) {
+        this.controller.addLog(`Enemy uses Fallen One from Limbo to Nullify ${source.data.name}'s ability!`);
+        this.moveToGraveyard(fallenOne);
+        return true;
       }
+      return false;
+    }
+
+    this.controller.updateState({
+      instructionText: `Use Fallen One from Limbo to Nullify ${source.data.name}?`,
+      currentPhase: Phase.ABILITY_TARGETING,
+      decisionContext: 'FALLEN_ONE',
+      decisionMessage: `Opponent revealed ${source.data.name}. Use Fallen One from your Limbo to nullify its ability? (Fallen One is moved to your Graveyard.)`
+    });
+
+    const confirmed = await new Promise<boolean>((resolve) => {
+      (this.controller as any).nullifyCallback = resolve;
+    });
+
+    this.controller.updateState({ decisionContext: undefined, decisionMessage: undefined });
+
+    if (confirmed) {
+      const fo = opponentLimbo.find((c) => c.data.name === 'Fallen One');
+      if (!fo || !opponentLimbo.includes(fo)) return false;
+      this.controller.addLog(`Player uses Fallen One from Limbo to Nullify ${source.data.name}'s ability!`);
+      this.moveToGraveyard(fo);
+      return true;
     }
     return false;
   }
@@ -713,8 +873,14 @@ export class AbilityManager {
     const grave = isEnemy ? this.controller.enemyGraveyard : this.controller.playerGraveyard;
     const graveMesh = isEnemy ? this.controller.enemyGraveyardMesh : this.controller.playerGraveyardMesh;
 
+    if (grave.includes(card)) return;
+
     const idx = limbo.indexOf(card);
-    if (idx !== -1) limbo.splice(idx, 1);
+    if (idx === -1) {
+      this.controller.addLog(`${card.data.name} is not in Limbo and cannot be moved to the Graveyard this way.`);
+      return;
+    }
+    limbo.splice(idx, 1);
     grave.push(card);
 
     gsap.to(card.mesh.position, {
@@ -747,7 +913,9 @@ export class AbilityManager {
 
     if (source.data.name === "Nephilim") {
       if (isAI) {
-        const targetIdx = Math.floor(Math.random() * 7);
+        const pAlign = this.controller.state.playerAlignment;
+        const eAlign = pAlign === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
+        const targetIdx = pickNephilimSealIndex(this.controller.seals, eAlign);
         this.controller.updateState({ lockedSealIndex: targetIdx });
         this.controller.addLog(`Nephilim locks Seal ${targetIdx + 1} from influence changes.`);
       } else {
@@ -806,22 +974,23 @@ export class AbilityManager {
       return;
     }
 
-    // The Allotter: Activate = Destroy one Marker of any type (single target). Only flipped cards.
-    if (source.data.name === "The Allotter") {
+    // The Allotter / Seraphim Activate: Destroy one Marker of any type (single target). Only flipped cards.
+    if (source.data.name === "The Allotter" || source.data.name === "Seraphim") {
       const allBoard = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
       if (isAI) {
         const withMarkers = allBoard.filter(c => c.data.powerMarkers > 0 || c.data.weaknessMarkers > 0);
         if (withMarkers.length > 0) {
-          const target = withMarkers[Math.floor(Math.random() * withMarkers.length)];
-          this.applyAbilityEffect(target, { source, effect: 'destroy_marker' });
+          const target = pickAllotterTarget(source, withMarkers, this.controller.seals);
+          if (target) this.applyAbilityEffect(target, { source, effect: 'destroy_marker' });
         } else {
           this.controller.addLog(`${source.data.name} finds no Markers to destroy.`);
         }
         return;
       }
+      const label = source.data.name === "Seraphim" ? "Seraphim" : "The Allotter";
       this.controller.updateState({
         currentPhase: Phase.ABILITY_TARGETING,
-        instructionText: "The Allotter: Select a card with a Marker to destroy one Marker."
+        instructionText: `${label}: Select a card with a Marker to destroy one Marker.`
       });
       this.controller.zoomOut();
       await new Promise<void>((resolve) => {
@@ -951,10 +1120,15 @@ export class AbilityManager {
       const targetAlign = effect === Alignment.LIGHT ? Alignment.DARK : Alignment.LIGHT;
       let validSeals = this.controller.seals.filter(s => !s.champion && (s.alignment === targetAlign || s.alignment === Alignment.NEUTRAL));
       if (corruptOnly && effect === Alignment.LIGHT) validSeals = validSeals.filter(s => s.alignment === Alignment.DARK);
-      if (validSeals.length > 0 && effect) await this.controller.claimSeal(validSeals[0].index, effect, {
-        type: 'ability',
-        cardName: source.data.name
-      });
+      if (validSeals.length > 0 && effect) {
+        const seal = pickSealForEnemySealAbility(validSeals, effect, pAlign, eAlign);
+        if (seal) {
+          await this.controller.claimSeal(seal.index, effect, {
+            type: 'ability',
+            cardName: source.data.name
+          });
+        }
+      }
       return Promise.resolve();
     } else {
       this.controller.updateState({

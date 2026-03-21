@@ -126,6 +126,7 @@ function createMockControllerForBattle(): IGameController & {
     enemyGraveyard: [] as CardEntity[],
     playerDeck: [] as CardData[],
     enemyDeck: [] as CardData[],
+    enemyPrepRemainder: [] as CardData[],
     seals,
     playerLimboMesh: { position: { x: 0, y: 0, z: 0 } },
     enemyLimboMesh: { position: { x: 0, y: 0, z: 0 } },
@@ -147,6 +148,7 @@ function createMockControllerForBattle(): IGameController & {
     updateState: vi.fn((patch: Partial<typeof state>) => Object.assign(state, patch)),
     addLog,
     destroyCard,
+    appendEnemyPrepCardsToLimbo: vi.fn(),
     allocateCounters: vi.fn(() => Promise.resolve()),
     handleTargetedAbility: vi.fn(() => Promise.resolve()),
     executeGlobalAbility: vi.fn(() => Promise.resolve()),
@@ -244,6 +246,7 @@ function createMockControllerForAbilities(): IGameController & {
     enemyGraveyard: [] as CardEntity[],
     playerDeck,
     enemyDeck,
+    enemyPrepRemainder: [] as CardData[],
     seals,
     playerLimboMesh: { position: { x: 0, y: 0, z: 0 } },
     enemyLimboMesh: { position: { x: 0, y: 0, z: 0 } },
@@ -265,6 +268,7 @@ function createMockControllerForAbilities(): IGameController & {
     updateState: vi.fn((patch: Partial<typeof state>) => Object.assign(state, patch)),
     addLog,
     destroyCard,
+    appendEnemyPrepCardsToLimbo: vi.fn(),
     allocateCounters: vi.fn(() => Promise.resolve()),
     handleTargetedAbility: vi.fn(() => Promise.resolve()),
     executeGlobalAbility: vi.fn(() => Promise.resolve()),
@@ -533,7 +537,7 @@ describe('Pestilence – flip weakness by Horseman count', () => {
     return p;
   }
 
-  it('with 0 other Horsemen in play (only Pestilence flipping): places 0 weakness on enemy creatures', async () => {
+  it('only Pestilence flipping still counts itself: -2 weakness per Horseman (1) on each enemy', async () => {
     const pestilence = createMockCard({
       name: 'Pestilence',
       power: 9,
@@ -556,13 +560,13 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(enemyCreature.data.weaknessMarkers).toBe(0);
+    expect(enemyCreature.data.weaknessMarkers).toBe(2);
     expect(mock.addLog).toHaveBeenCalledWith(
-      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(0\)/)
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(1\).*\(2 total per creature\)/)
     );
   });
 
-  it('with 1 Horseman in play (Pestilence + one other face-up Horseman): places -2 weakness per enemy creature', async () => {
+  it('Pestilence + one other face-up Horseman: 2 Horsemen → -4 weakness per enemy creature', async () => {
     const pestilence = createMockCard({
       name: 'Pestilence',
       power: 9,
@@ -594,13 +598,13 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(enemyCreature.data.weaknessMarkers).toBe(2);
+    expect(enemyCreature.data.weaknessMarkers).toBe(4);
     expect(mock.addLog).toHaveBeenCalledWith(
-      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(1\).*\(2 total per creature\)/)
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(2\).*\(4 total per creature\)/)
     );
   });
 
-  it('with 2 Horsemen in play: places -4 weakness per enemy creature', async () => {
+  it('Pestilence + two other face-up Horsemen: 3 Horsemen → -6 weakness per enemy creature', async () => {
     const pestilence = createMockCard({
       name: 'Pestilence',
       power: 9,
@@ -641,13 +645,13 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(enemyCreature.data.weaknessMarkers).toBe(4);
+    expect(enemyCreature.data.weaknessMarkers).toBe(6);
     expect(mock.addLog).toHaveBeenCalledWith(
-      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(2\).*\(4 total per creature\)/)
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(3\).*\(6 total per creature\)/)
     );
   });
 
-  it('with 3 Horsemen in play: places -6 weakness per enemy creature', async () => {
+  it('Pestilence + three other face-up Horsemen: 4 Horsemen → -8 weakness per enemy creature', async () => {
     const pestilence = createMockCard({
       name: 'Pestilence',
       power: 9,
@@ -694,9 +698,9 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(enemyCreature.data.weaknessMarkers).toBe(6);
+    expect(enemyCreature.data.weaknessMarkers).toBe(8);
     expect(mock.addLog).toHaveBeenCalledWith(
-      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(3\).*\(6 total per creature\)/)
+      expect.stringMatching(/Pestilence places -2 Weakness per Horseman \(4\).*\(8 total per creature\)/)
     );
   });
 
@@ -739,7 +743,7 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(faceUpEnemy.data.weaknessMarkers).toBe(2);
+    expect(faceUpEnemy.data.weaknessMarkers).toBe(4);
     expect(faceDownEnemy.data.weaknessMarkers).toBe(0);
   });
 
@@ -790,9 +794,9 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(enemy0.data.weaknessMarkers).toBe(2);
-    expect(enemy1.data.weaknessMarkers).toBe(2);
-    expect(enemy2.data.weaknessMarkers).toBe(2);
+    expect(enemy0.data.weaknessMarkers).toBe(4);
+    expect(enemy1.data.weaknessMarkers).toBe(4);
+    expect(enemy2.data.weaknessMarkers).toBe(4);
   });
 
   it('applies weakness to enemy champions on seals (ascended)', async () => {
@@ -835,8 +839,8 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(enemyOnBattlefield.data.weaknessMarkers).toBe(2);
-    expect(enemyChampionOnSeal.data.weaknessMarkers).toBe(2);
+    expect(enemyOnBattlefield.data.weaknessMarkers).toBe(4);
+    expect(enemyChampionOnSeal.data.weaknessMarkers).toBe(4);
   });
 
   it('applies weakness to enemies on battlefield and on multiple seals', async () => {
@@ -896,7 +900,7 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    const amountPerCreature = 4;
+    const amountPerCreature = 6;
     expect(enemyOnField.data.weaknessMarkers).toBe(amountPerCreature);
     expect(championOnSeal0.data.weaknessMarkers).toBe(amountPerCreature);
     expect(championOnSeal3.data.weaknessMarkers).toBe(amountPerCreature);
@@ -943,8 +947,8 @@ describe('Pestilence – flip weakness by Horseman count', () => {
 
     await resolveSealWithFakeTimers(0);
 
-    expect(sloth.data.weaknessMarkers).toBe(2);
-    expect(normalEnemy.data.weaknessMarkers).toBe(2);
+    expect(sloth.data.weaknessMarkers).toBe(4);
+    expect(normalEnemy.data.weaknessMarkers).toBe(4);
   });
 });
 
@@ -1688,6 +1692,35 @@ describe('AbilityManager – immunity and counts', () => {
     const count = mock.abilityManager.countHorsemenInPlay(true);
     expect(count).toBe(2);
   });
+
+  it('countHorsemenForPestilenceFlip counts face-down flipping Pestilence plus face-up Horsemen', () => {
+    const pest = createMockCard({
+      name: 'Pestilence',
+      type: 'Horseman',
+      isEnemy: true,
+      faceUp: false,
+    }) as unknown as CardEntity;
+    const war = createMockCard({
+      name: 'War',
+      type: 'Horseman',
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[1] = war;
+    expect(mock.abilityManager.countHorsemenInPlay(true)).toBe(1);
+    expect(mock.abilityManager.countHorsemenForPestilenceFlip(true, pest)).toBe(2);
+  });
+
+  it('countHorsemenForPestilenceFlip does not add +1 if source Horseman is already face-up (no double count)', () => {
+    const pest = createMockCard({
+      name: 'Pestilence',
+      type: 'Horseman',
+      isEnemy: true,
+      faceUp: true,
+    }) as unknown as CardEntity;
+    mock.enemyBattlefield[0] = pest;
+    expect(mock.abilityManager.countHorsemenForPestilenceFlip(true, pest)).toBe(1);
+  });
 });
 
 describe('AbilityManager – enforceZeroPowerDestruction (markers can kill any creature)', () => {
@@ -1888,6 +1921,7 @@ function createMockControllerForLust(chosenAlignment: Alignment): IGameControlle
     enemyGraveyard: [] as CardEntity[],
     playerDeck: [] as CardData[],
     enemyDeck: [] as CardData[],
+    enemyPrepRemainder: [] as CardData[],
     seals,
     playerLimboMesh: { position: { x: 0, y: 0, z: 0 } },
     enemyLimboMesh: { position: { x: 0, y: 0, z: 0 } },
@@ -1909,6 +1943,7 @@ function createMockControllerForLust(chosenAlignment: Alignment): IGameControlle
     updateState,
     addLog,
     destroyCard,
+    appendEnemyPrepCardsToLimbo: vi.fn(),
     allocateCounters: vi.fn(() => Promise.resolve()),
     handleTargetedAbility: vi.fn(() => Promise.resolve()),
     executeGlobalAbility: vi.fn(() => Promise.resolve()),

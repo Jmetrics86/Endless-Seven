@@ -4,6 +4,14 @@ import { Phase, Alignment, CardData } from '../types';
 import { CardEntity, getOrLoadBackTexture } from '../entities/CardEntity';
 import { IGameController } from './interfaces';
 import { GAME_CONSTANTS } from '../constants';
+import {
+  pickDeathCreatureType,
+  pickDeltaBuffTarget,
+  pickHadesLimboCard,
+  pickThronesSeal,
+  preferEnemyFirstWhenFlipPowerTied,
+  vacantSlotPriorityForReinforce,
+} from './EnemyEasyAI';
 
 export class PhaseManager {
   constructor(private controller: IGameController) {}
@@ -62,8 +70,16 @@ export class PhaseManager {
   private enemyReinforce() {
     const aiHand: CardData[] = [];
     for (let i = 0; i < 8; i++) { if (this.controller.enemyDeck.length > 0) aiHand.push(this.controller.enemyDeck.pop()!); }
-    
+
+    const handStrength = (d: CardData) => (d.isChampion ? 85 : 0) + d.power;
+    aiHand.sort((a, b) => handStrength(b) - handStrength(a));
+
     const vacantSlots = this.controller.enemyBattlefield.map((v, i) => v === null ? i : -1).filter(i => i !== -1);
+    vacantSlots.sort(
+      (a, b) =>
+        vacantSlotPriorityForReinforce(b, this.controller.playerBattlefield) -
+        vacantSlotPriorityForReinforce(a, this.controller.playerBattlefield)
+    );
     for (let i = 0; i < vacantSlots.length && aiHand.length > 0; i++) {
       const slotIdx = vacantSlots[i];
       const cardData = aiHand.shift()!;
@@ -83,6 +99,7 @@ export class PhaseManager {
         delay: i * 0.15
       });
     }
+    this.controller.enemyPrepRemainder = [...aiHand];
     this.controller.updateState({});
   }
 
@@ -108,7 +125,14 @@ export class PhaseManager {
       });
     });
     (this.controller as any).playerHand = [];
-    setTimeout(() => this.startResolution(), 800);
+    setTimeout(() => void this.finishEndPrepAndStartResolution(), 800);
+  }
+
+  private async finishEndPrepAndStartResolution() {
+    this.controller.appendEnemyPrepCardsToLimbo();
+    await new Promise((r) => setTimeout(r, 400));
+    await this.controller.abilityManager.runEnemyPrepAutomation();
+    await this.startResolution();
   }
 
   public async startResolution() {
@@ -206,7 +230,11 @@ export class PhaseManager {
     let executionOrder: ('player' | 'enemy' | 'champion')[] = [];
     if (pEff < eEff) executionOrder = ['player', 'enemy'];
     else if (eEff < pEff) executionOrder = ['enemy', 'player'];
-    else executionOrder = Math.random() < 0.5 ? ['player', 'enemy'] : ['enemy', 'player'];
+    else {
+      executionOrder = preferEnemyFirstWhenFlipPowerTied(pCard, eCard, pFlipping, eFlipping)
+        ? ['enemy', 'player']
+        : ['player', 'enemy'];
+    }
 
     if (seal.champion) executionOrder.push('champion');
 
@@ -300,7 +328,7 @@ export class PhaseManager {
         current.data.isActivatingAbility = false;
       }
       // The Almighty, The Allotter, Saint Michael, The Spinner, Lord, Greed: Activate
-      if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Saint Michael" || current.data.name === "The Spinner" || current.data.name === "Lord" || current.data.name === "Greed" || current.data.name === "The Destroyer" || current.data.name === "Lilith" || current.data.name === "Death")) {
+      if (isActivate && (current.data.name === "The Almighty" || current.data.name === "The Allotter" || current.data.name === "Seraphim" || current.data.name === "Saint Michael" || current.data.name === "The Spinner" || current.data.name === "Lord" || current.data.name === "Greed" || current.data.name === "The Destroyer" || current.data.name === "Lilith" || current.data.name === "Death")) {
         current.data.isActivatingAbility = true;
         await (this.controller.abilityManager as any).handleActivateAbility(current, current.data.isEnemy);
         current.data.isActivatingAbility = false;
@@ -454,7 +482,11 @@ export class PhaseManager {
           this.controller.addLog(`${current.data.name} finds no creatures in play to destroy.`);
         } else {
           const chosenType = side === 'enemy'
-            ? typesInPlay[Math.floor(Math.random() * typesInPlay.length)]
+            ? pickDeathCreatureType({
+                typesInPlay,
+                allInPlay,
+                sourceIsEnemy: current.data.isEnemy,
+              })
             : await new Promise<string>((resolve) => {
                 this.controller.updateState({
                   currentPhase: Phase.ABILITY_TARGETING,
@@ -500,14 +532,16 @@ export class PhaseManager {
         const limbo = current.data.isEnemy ? this.controller.enemyLimbo : this.controller.playerLimbo;
         if (limbo.length > 0) {
           if (side === 'enemy') {
-            const pick = limbo[Math.floor(Math.random() * limbo.length)];
-            const idx = limbo.indexOf(pick);
-            limbo.splice(idx, 1);
-            const deck = current.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
-            const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, boardPresencePowerMarkers, ...baseData } = pick.data;
-            deck.push({ ...baseData });
-            this.controller.disposeCard(pick);
-            this.controller.addLog(`${current.data.name} places ${pick.data.name} from Limbo on top of deck.`);
+            const pick = pickHadesLimboCard(limbo);
+            if (pick) {
+              const idx = limbo.indexOf(pick);
+              limbo.splice(idx, 1);
+              const deck = current.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
+              const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, boardPresencePowerMarkers, ...baseData } = pick.data;
+              deck.push({ ...baseData });
+              this.controller.disposeCard(pick);
+              this.controller.addLog(`${current.data.name} places ${pick.data.name} from Limbo on top of deck.`);
+            }
           } else {
             this.controller.updateState({
               currentPhase: Phase.ABILITY_TARGETING,
@@ -526,7 +560,7 @@ export class PhaseManager {
 
       // Pestilence: Flip = Place -2 Weakness on all Enemy creatures for each Horseman you have in play. Only flipped cards are affected.
       if (current.data.name === "Pestilence" && isFlipping) {
-        const horsemanCount = this.controller.abilityManager.countHorsemenInPlay(current.data.isEnemy);
+        const horsemanCount = this.controller.abilityManager.countHorsemenForPestilenceFlip(current.data.isEnemy, current);
         const amount = 2 * horsemanCount;
         const enemyCreatures = (side === 'player'
           ? [...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion).filter(c => c !== null && c!.data.isEnemy)]
@@ -877,12 +911,7 @@ export class PhaseManager {
           ...this.controller.seals.map(s => s.champion)
         ].filter(c => c !== null) as CardEntity[];
 
-        const effectivePower = (card: CardEntity) =>
-          card.data.power + card.data.powerMarkers - card.data.weaknessMarkers;
-
-        const target = enemyAllies.reduce((best, current) =>
-          effectivePower(current) > effectivePower(best) ? current : best
-        , enemyAllies[0]);
+        const target = pickDeltaBuffTarget(enemyAllies, this.controller.seals);
 
         target.data.powerMarkers += 3;
         target.updateVisualMarkers();
