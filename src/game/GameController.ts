@@ -73,7 +73,11 @@ export class GameController implements IGameController {
   private zoneHoverMeshes: { mesh: THREE.Mesh; zone: 'playerLimbo' | 'enemyLimbo' | 'playerGraveyard' | 'enemyGraveyard' }[] = [];
 
   public isProcessing = false;
+  /** True while camera is close on the resolving seal; card hover lift is disabled. */
+  public sealCameraZoomedIn = false;
   private activeSelection: CardEntity | null = null;
+  /** Card currently receiving hover lift animation (hand / table / limbo). */
+  private cardHoverLiftTarget: CardEntity | null = null;
   public currentResolvingSealIndex: number = -1;
   private selectedObject: CardEntity | null = null;
   public pendingBaronSwapSlot: number | null = null;
@@ -553,10 +557,13 @@ export class GameController implements IGameController {
   }
 
   public zoomOut() {
+    this.sealCameraZoomedIn = false;
     this.phaseManager.zoomOut();
   }
 
   public zoomIn(idx: number) {
+    this.sealCameraZoomedIn = true;
+    this.clearCardHoverLiftTarget();
     this.phaseManager.zoomIn(idx);
   }
 
@@ -814,9 +821,10 @@ export class GameController implements IGameController {
     const intersects = this.inputHandler.raycaster.intersectObjects(allCards.map(c => c.mesh), true);
 
     if (intersects.length > 0) {
-      let obj = intersects[0].object;
-      while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
-      const card = allCards.find(c => c.mesh === obj);
+      const card = this.findCardEntityFromObject(intersects[0].object, allCards);
+      if (!this.sealCameraZoomedIn) {
+        this.updateCardHoverLift(card ?? null);
+      }
       if (card && this.selectedObject !== card) {
         this.selectedObject = card;
         const hovered: HoveredCardInfo = {
@@ -837,6 +845,9 @@ export class GameController implements IGameController {
         }
       }
     } else {
+      if (!this.sealCameraZoomedIn) {
+        this.updateCardHoverLift(null);
+      }
       const zoneMeshes = this.zoneHoverMeshes.map((z) => z.mesh);
       const zoneIntersects = this.inputHandler.raycaster.intersectObjects(zoneMeshes);
       let hoveredZone: GameState['hoveredZone'] = null;
@@ -849,6 +860,71 @@ export class GameController implements IGameController {
       }
       this.selectedObject = null;
       this.updateState({ hoveredCard: null, hoveredZone });
+    }
+  }
+
+  /** Walk parents until we find a card root mesh in the given list. */
+  private findCardEntityFromObject(obj: THREE.Object3D | null, cards: CardEntity[]): CardEntity | null {
+    let o: THREE.Object3D | null = obj;
+    while (o) {
+      const hit = cards.find((c) => c.mesh === o);
+      if (hit) return hit;
+      o = o.parent;
+    }
+    return null;
+  }
+
+  /** Local Y on CardEntity.visualLiftRoot: hand (tilted) vs flat table vs limbo pile. */
+  private static readonly HOVER_LIFT_HAND = 0.52;
+  /** Magnitude for table/limbo; sign depends on faceUp (rotation flips local Y axis). */
+  private static readonly HOVER_LIFT_TABLE_MAG = 0.22;
+  private static readonly HOVER_LIFT_LIMBO_MAG = 0.14;
+
+  private updateCardHoverLift(hovered: CardEntity | null) {
+    const sealChampions = this.seals.map((s) => s.champion).filter((c): c is CardEntity => c !== null);
+    const liftCandidates: CardEntity[] = [
+      ...this.playerHand,
+      ...this.playerBattlefield.filter((c): c is CardEntity => c !== null),
+      ...this.enemyBattlefield.filter((c): c is CardEntity => c !== null),
+      ...sealChampions,
+      ...this.playerLimbo,
+    ];
+
+    const eligible =
+      hovered &&
+      liftCandidates.includes(hovered) &&
+      hovered !== this.activeSelection;
+
+    const nextTarget = eligible ? hovered : null;
+    if (nextTarget === this.cardHoverLiftTarget) return;
+
+    if (this.cardHoverLiftTarget) {
+      this.cardHoverLiftTarget.resetHoverLift(0.24);
+    }
+    this.cardHoverLiftTarget = nextTarget;
+
+    if (!nextTarget) return;
+
+    let localY: number;
+    if (this.playerHand.includes(nextTarget)) {
+      localY = GameController.HOVER_LIFT_HAND;
+    } else if (this.playerLimbo.includes(nextTarget)) {
+      // Face-up: rotation.x=0, local +Y = world up. Face-down: rotation.x=π, local -Y = world up.
+      const mag = GameController.HOVER_LIFT_LIMBO_MAG;
+      localY = nextTarget.data.faceUp ? mag : -mag;
+    } else {
+      // Table / battlefield / champions: same axis flip when flipped
+      const mag = GameController.HOVER_LIFT_TABLE_MAG;
+      localY = nextTarget.data.faceUp ? mag : -mag;
+    }
+
+    nextTarget.tweenHoverLift(localY, 0.3, 'power2.out');
+  }
+
+  private clearCardHoverLiftTarget() {
+    if (this.cardHoverLiftTarget) {
+      this.cardHoverLiftTarget.resetHoverLift(0.22);
+      this.cardHoverLiftTarget = null;
     }
   }
 
@@ -865,9 +941,7 @@ export class GameController implements IGameController {
     if (this.state.currentPhase === Phase.PREP) {
       const limboIntersects = this.inputHandler.raycaster.intersectObjects(this.playerLimbo.map(c => c.mesh), true);
       if (limboIntersects.length > 0) {
-        let obj = limboIntersects[0].object;
-        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
-        const card = this.playerLimbo.find(c => c.mesh === obj);
+        const card = this.findCardEntityFromObject(limboIntersects[0].object, this.playerLimbo);
         if (card && this.pendingBaronSwapSlot !== null) {
           const slot = this.pendingBaronSwapSlot;
           const baron = this.playerBattlefield[slot];
@@ -896,9 +970,7 @@ export class GameController implements IGameController {
       const playerBfCards = this.playerBattlefield.filter(c => c !== null) as CardEntity[];
       const bfIntersects = this.inputHandler.raycaster.intersectObjects(playerBfCards.map(c => c.mesh), true);
       if (bfIntersects.length > 0 && this.pendingBaronSwapSlot === null) {
-        let obj = bfIntersects[0].object;
-        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
-        const card = playerBfCards.find(c => c.mesh === obj);
+        const card = this.findCardEntityFromObject(bfIntersects[0].object, playerBfCards);
         if (card?.data.hasSwapAbility) {
           const slot = this.playerBattlefield.indexOf(card);
           this.pendingBaronSwapSlot = slot;
@@ -909,9 +981,9 @@ export class GameController implements IGameController {
 
       const handIntersects = this.inputHandler.raycaster.intersectObjects(this.playerHand.map(c => c.mesh), true);
       if (handIntersects.length > 0) {
-        let obj = handIntersects[0].object;
-        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
-        this.activeSelection = this.playerHand.find(c => c.mesh === obj) || null;
+        const picked = this.findCardEntityFromObject(handIntersects[0].object, this.playerHand);
+        this.clearCardHoverLiftTarget();
+        this.activeSelection = picked;
         return;
       }
 
@@ -926,6 +998,7 @@ export class GameController implements IGameController {
             this.addLog(`Player places ${card.data.name} at Seal ${idx + 1}`);
             this.playerHand = this.playerHand.filter(c => c !== card);
             this.playerBattlefield[idx] = card;
+            card.resetHoverLift(0.06);
             gsap.to(card.mesh.position, {
               x: (idx - 3) * GAME_CONSTANTS.SLOT_SPACING,
               y: 0.1,
@@ -943,9 +1016,7 @@ export class GameController implements IGameController {
       const allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp) as CardEntity[];
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
-        let obj = intersects[0].object;
-        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
-        const card = allBoard.find(c => c.mesh === obj);
+        const card = this.findCardEntityFromObject(intersects[0].object, allBoard);
         if (card) {
           if (this.pendingAbilityData && this.pendingAbilityData.source && this.isImmuneToAbilities(card, this.pendingAbilityData.source)) {
             this.addLog(`${card.data.name} is immune to markers from ${this.pendingAbilityData.source.data.name}`);
@@ -965,9 +1036,7 @@ export class GameController implements IGameController {
       const allBoard = [...this.playerBattlefield, ...this.enemyBattlefield, ...this.seals.map(s => s.champion)].filter(c => c !== null && c.data.faceUp) as CardEntity[];
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
-        let obj = intersects[0].object;
-        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
-        const card = allBoard.find(c => c.mesh === obj);
+        const card = this.findCardEntityFromObject(intersects[0].object, allBoard);
         if (card) {
           card.data.powerMarkers += 3;
           card.updateVisualMarkers();
@@ -1019,9 +1088,7 @@ export class GameController implements IGameController {
       }
       const intersects = this.inputHandler.raycaster.intersectObjects(allBoard.map(c => c.mesh), true);
       if (intersects.length > 0) {
-        let obj = intersects[0].object;
-        while (obj.parent && !(obj instanceof THREE.Group)) obj = obj.parent;
-        const card = allBoard.find(c => c.mesh === obj);
+        const card = this.findCardEntityFromObject(intersects[0].object, allBoard);
         if (card) {
           if (forSentinel && !this.playerLimbo.includes(card) && !this.enemyLimbo.includes(card)) return; // Sentinel must target Limbo
           if (forChampion && !card.data.isChampion) return; // Lord must target Champion
@@ -1079,6 +1146,7 @@ export class GameController implements IGameController {
   }
 
   public dispose() {
+    this.clearCardHoverLiftTarget();
     this.sceneManager.dispose();
     this.inputHandler.dispose();
     this.entityManager.clear();

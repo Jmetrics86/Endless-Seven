@@ -24,6 +24,8 @@ export interface IGameController {
   uiManager: any;
   phaseManager: any;
   isProcessing: boolean;
+  /** True while camera is zoomed on the current seal during resolution (hover lift disabled). */
+  sealCameraZoomedIn: boolean;
   currentResolvingSealIndex: number;
   cardsThatBattledThisRound: CardEntity[];
   resolutionCallback: (() => void) | null;

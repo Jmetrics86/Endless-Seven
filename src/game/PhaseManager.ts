@@ -124,7 +124,8 @@ export class PhaseManager {
     await this.cleanupEndOfRoundEffects();
     
     if (this.controller.state.currentPhase !== Phase.GAME_OVER) {
-      // Reset camera
+      // Reset camera (not via zoomOut — still mark wide view for hover/UI)
+      this.controller.sealCameraZoomedIn = false;
       gsap.to(this.controller.sceneManager.camera.position, { x: 0, y: 28, z: 32, duration: 1.5, ease: "power2.inOut" });
       gsap.to(this.controller.sceneManager.cameraTarget, { x: 0, y: 0, z: -2, duration: 1.5, ease: "power2.inOut" });
       await new Promise(r => setTimeout(r, 1600));

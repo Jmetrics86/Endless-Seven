@@ -96,6 +96,7 @@ function createCtrl() {
     phaseManager: {},
     isProcessing: false,
     currentResolvingSealIndex: 0,
+    sealCameraZoomedIn: false,
     cardsThatBattledThisRound: [] as MockCard[],
     resolutionCallback: null as (() => void) | null,
     pendingAbilityData: null,

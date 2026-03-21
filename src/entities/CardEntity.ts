@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import gsap from 'gsap';
 import { CardData, Alignment } from '../types';
 import { GAME_CONSTANTS } from '../constants';
 import { GameEntity } from '../engine/EntityManager';
@@ -95,6 +96,15 @@ export class CardEntity implements GameEntity {
   /** Rectangular halo on the table when this card is activating a non-flip ability. */
   private abilityHalo: THREE.Mesh;
 
+  /** Main card box mesh (for emissive pulse in update). */
+  private bodyMesh: THREE.Mesh;
+
+  /**
+   * Child of mesh: all card visuals live here so hover lift tweens this group's local Y
+   * without fighting gameplay tweens on mesh.position.
+   */
+  private visualLiftRoot: THREE.Group;
+
   /** Face label mesh (top of card); material.map may be replaced when art loads. */
   private faceLabel: THREE.Mesh;
   /** Back plane (bottom of card); shows when card is face down. */
@@ -117,13 +127,16 @@ export class CardEntity implements GameEntity {
     };
 
     this.mesh = new THREE.Group();
+    this.visualLiftRoot = new THREE.Group();
+    this.mesh.add(this.visualLiftRoot);
+
     const color = isEnemy 
       ? (playerAlignment === Alignment.LIGHT ? 0x551111 : 0x113366) 
       : (playerAlignment === Alignment.LIGHT ? 0x113366 : 0x551111);
 
     this.baseEmissiveColor = new THREE.Color(color);
 
-    const body = new THREE.Mesh(
+    this.bodyMesh = new THREE.Mesh(
       new THREE.BoxGeometry(GAME_CONSTANTS.CARD_W, 0.1, GAME_CONSTANTS.CARD_H),
       new THREE.MeshPhongMaterial({
         color,
@@ -131,7 +144,7 @@ export class CardEntity implements GameEntity {
         emissiveIntensity: isEnemy ? 0.3 : 0.8
       })
     );
-    this.mesh.add(body);
+    this.visualLiftRoot.add(this.bodyMesh);
 
     // Main Card Face
     const canvas = document.createElement('canvas');
@@ -169,7 +182,7 @@ export class CardEntity implements GameEntity {
     );
     this.faceLabel.rotation.x = -Math.PI / 2;
     this.faceLabel.position.y = 0.08;
-    this.mesh.add(this.faceLabel);
+    this.visualLiftRoot.add(this.faceLabel);
 
     // Card back plane (visible when face-down); use Promise so all cards wait for one load (no race)
     const backGeo = new THREE.PlaneGeometry(GAME_CONSTANTS.CARD_W * 0.95, GAME_CONSTANTS.CARD_H * 0.95);
@@ -180,7 +193,7 @@ export class CardEntity implements GameEntity {
     this.backPlane = new THREE.Mesh(backGeo, backMat);
     this.backPlane.rotation.x = Math.PI / 2;
     this.backPlane.position.y = -0.08;
-    this.mesh.add(this.backPlane);
+    this.visualLiftRoot.add(this.backPlane);
     // Kick off load so sharedBackTexture is set when ready. Apply only in update() so the first
     // card (leftmost) gets the texture the same way as the rest — applying in .then() here can
     // leave the first card gray because it runs before the mesh is fully in the scene.
@@ -207,7 +220,7 @@ export class CardEntity implements GameEntity {
     this.pMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8), new THREE.MeshBasicMaterial({ map: this.pTex, transparent: true }));
     this.pMesh.rotation.x = -Math.PI / 2;
     this.pMesh.position.set(-0.7, 0.09, 1.2);
-    this.mesh.add(this.pMesh);
+    this.visualLiftRoot.add(this.pMesh);
 
     this.wCanvas = document.createElement('canvas');
     this.wCanvas.width = 128;
@@ -216,7 +229,7 @@ export class CardEntity implements GameEntity {
     this.wMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8), new THREE.MeshBasicMaterial({ map: this.wTex, transparent: true }));
     this.wMesh.rotation.x = -Math.PI / 2;
     this.wMesh.position.set(0.7, 0.09, 1.2);
-    this.mesh.add(this.wMesh);
+    this.visualLiftRoot.add(this.wMesh);
 
     this.tCanvas = document.createElement('canvas');
     this.tCanvas.width = 128;
@@ -225,7 +238,7 @@ export class CardEntity implements GameEntity {
     this.tMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.8), new THREE.MeshBasicMaterial({ map: this.tTex, transparent: true }));
     this.tMesh.rotation.x = -Math.PI / 2;
     this.tMesh.position.set(0, 0.09, 1.2);
-    this.mesh.add(this.tMesh);
+    this.visualLiftRoot.add(this.tMesh);
 
     this.nCanvas = document.createElement('canvas');
     this.nCanvas.width = 128;
@@ -234,7 +247,7 @@ export class CardEntity implements GameEntity {
     this.nMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map: this.nTex, transparent: true }));
     this.nMesh.rotation.x = -Math.PI / 2;
     this.nMesh.position.set(0, 0.1, -1.2); // Top middle
-    this.mesh.add(this.nMesh);
+    this.visualLiftRoot.add(this.nMesh);
 
     // Wild Wolf death marker (black X)
     this.xCanvas = document.createElement('canvas');
@@ -244,7 +257,7 @@ export class CardEntity implements GameEntity {
     this.xMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), new THREE.MeshBasicMaterial({ map: this.xTex, transparent: true }));
     this.xMesh.rotation.x = -Math.PI / 2;
     this.xMesh.position.set(0, 0.12, 0);
-    this.mesh.add(this.xMesh);
+    this.visualLiftRoot.add(this.xMesh);
 
     this.updateVisualMarkers();
 
@@ -260,7 +273,19 @@ export class CardEntity implements GameEntity {
     this.abilityHalo.rotation.x = -Math.PI / 2;
     this.abilityHalo.position.set(0, 0.13, 0);
     this.abilityHalo.visible = false;
-    this.mesh.add(this.abilityHalo);
+    this.visualLiftRoot.add(this.abilityHalo);
+  }
+
+  /** Animate local Y lift for hover (does not touch mesh.position). */
+  public tweenHoverLift(localY: number, duration: number, ease: string = 'power2.out') {
+    gsap.killTweensOf(this.visualLiftRoot.position);
+    gsap.to(this.visualLiftRoot.position, { y: localY, duration, ease });
+  }
+
+  /** Return hover lift to neutral. */
+  public resetHoverLift(duration: number = 0.28, ease: string = 'power2.out') {
+    gsap.killTweensOf(this.visualLiftRoot.position);
+    gsap.to(this.visualLiftRoot.position, { y: 0, duration, ease });
   }
 
   public updateVisualMarkers() {
@@ -340,8 +365,7 @@ export class CardEntity implements GameEntity {
   }
 
   public update(time: number) {
-    const body = this.mesh.children[0] as THREE.Mesh;
-    const material = body.material as THREE.MeshPhongMaterial;
+    const material = this.bodyMesh.material as THREE.MeshPhongMaterial;
     if (this.data.isActivatingAbility) {
       // Strong white emissive + pulsing scale + rectangular halo
       material.emissive.set(0xffffff);
