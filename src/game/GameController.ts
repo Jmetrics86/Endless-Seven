@@ -537,10 +537,11 @@ export class GameController implements IGameController {
       const idx = limbo.indexOf(card);
       if (idx !== -1) limbo.splice(idx, 1);
       const deck = this.playerDeck;
-      const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = card.data;
+      const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, boardPresencePowerMarkers, ...baseData } = card.data;
       deck.push({ ...baseData });
       this.disposeCard(card);
       this.addLog(`Hades places ${card.data.name} from Limbo on top of deck.`);
+      this.abilityManager.syncBoardPresencePowerMarkers();
     } else {
       return;
     }
@@ -588,6 +589,7 @@ export class GameController implements IGameController {
     }
     if (this.resolutionCallback) this.resolutionCallback();
     this.resolutionCallback = null;
+    this.abilityManager.syncBoardPresencePowerMarkers();
   }
 
 
@@ -657,6 +659,7 @@ export class GameController implements IGameController {
         : `${card.data.name} was destroyed by ${killedBy.cardName}'s ability.`;
       this.addLog(msg);
     }
+    this.abilityManager.stripBoardPresencePowerFromCard(card);
     const limbo = isEnemy ? this.enemyLimbo : this.playerLimbo;
     const mesh = isEnemy ? this.enemyLimboMesh : this.playerLimboMesh;
     limbo.push(card);
@@ -691,6 +694,8 @@ export class GameController implements IGameController {
       (card as any).setOpacity(opacityState.value);
     };
     fadeTo(1);
+
+    this.abilityManager.syncBoardPresencePowerMarkers();
 
     const tl = gsap.timeline({
       onComplete: () => this.updateLimboGraveyardVisibility()
@@ -879,6 +884,7 @@ export class GameController implements IGameController {
             this.addLog(`Baron swaps with ${card.data.name} in Limbo.`);
             this.pendingBaronSwapSlot = null;
             this.updateState({ instructionText: '' });
+            this.abilityManager.syncBoardPresencePowerMarkers();
           }
           return;
         }
@@ -929,6 +935,7 @@ export class GameController implements IGameController {
             gsap.to(card.mesh.rotation, { x: Math.PI, y: 0, z: 0, duration: 0.5 });
             card.applyBackTextureIfNeeded();
             this.activeSelection = null;
+            this.abilityManager.syncBoardPresencePowerMarkers();
           }
         }
       }

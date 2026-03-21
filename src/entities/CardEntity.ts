@@ -65,6 +65,11 @@ export class CardEntity implements GameEntity {
     markedForDeltaBuff?: boolean;
     /** True while this card is resolving a non-flip ability (Activate, etc.). */
     isActivatingAbility?: boolean;
+    /**
+     * Subtotal of powerMarkers from "count matching types / faction in play" (Spinner, Omega, Hades).
+     * Kept in sync by AbilityManager.syncBoardPresencePowerMarkers so totals do not stack incorrectly.
+     */
+    boardPresencePowerMarkers?: number;
   };
 
   private pCanvas: HTMLCanvasElement;

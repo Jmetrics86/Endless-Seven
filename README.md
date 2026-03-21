@@ -68,7 +68,8 @@ Seals are resolved **in order** from Seal 1 through Seal 7. For each Seal, the e
    - **Nullify** (e.g. Archangel, Baron) can cancel an opponent’s **Flip** if they are still face down and not immune.  
    - **Activate** abilities on cards that have `hasActivate` run in this step when it is their turn (not only on flip—implementation treats activate as part of this pass).  
    - Many effects require **targets** or **allocation** (power/weakness pools, markers)—the UI enters sub-phases such as `ABILITY_TARGETING`, `SEAL_TARGETING`, `COUNTER_ALLOCATION`, etc.  
-   - After all abilities in this step, **any creature at 0 or lower effective power is destroyed** (`enforceZeroPowerDestruction`), even if it had combat invulnerability.
+   - After all abilities in this step, **any creature at 0 or lower effective power is destroyed** (`enforceZeroPowerDestruction`), even if it had combat invulnerability.  
+   - **Count-based Power Markers** (**The Spinner**, **Omega**, **Hades**): the engine tracks how much of a card’s `powerMarkers` comes from “how many matching cards are in play” (and Limbo for Omega) and **recomputes** that portion whenever the board or Limbo changes (`AbilityManager.syncBoardPresencePowerMarkers`), including after lane cards become **face-up** at the end of this step. Other cards (**War** after a kill, **Lord** on Activate, allocation, etc.) still gain markers from their own rules and are not part of that tracked subtotal.
 
 4. **Step C — Combat**  
    - If **Fledgeling** is in the lane, combat is skipped (**stymied**).  
@@ -167,7 +168,7 @@ npm run build:pages
 npm test
 ```
 
-Card interaction and combat cases live in [`src/game/__tests__/card-interactions.test.ts`](src/game/__tests__/card-interactions.test.ts).
+Card interaction and combat cases live in [`src/game/__tests__/card-interactions.test.ts`](src/game/__tests__/card-interactions.test.ts). Count-based Power Marker sync (**Spinner** / **Omega** / **Hades**) and related cases are in [`src/game/__tests__/board-presence-power-markers.test.ts`](src/game/__tests__/board-presence-power-markers.test.ts).
 
 ---
 

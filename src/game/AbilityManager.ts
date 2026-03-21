@@ -77,6 +77,8 @@ export class AbilityManager {
       source.data.powerMarkers += totalP;
       source.data.weaknessMarkers += totalW;
       source.updateVisualMarkers();
+      this.resetBoardPresencePowerTracking();
+      this.syncBoardPresencePowerMarkers();
     } else if (effect === 'corrupt_undefended') {
       for (const s of this.controller.seals.filter(s => !s.champion && s.alignment === Alignment.LIGHT)) {
         await this.controller.claimSeal(s.index, Alignment.DARK, {
@@ -94,6 +96,8 @@ export class AbilityManager {
       });
       source.data.powerMarkers += totalP;
       source.updateVisualMarkers();
+      this.resetBoardPresencePowerTracking();
+      this.syncBoardPresencePowerMarkers();
       this.controller.addLog(`${source.data.name} transfers all Power Markers in play to itself.`);
     }
     await new Promise(r => setTimeout(r, 600));
@@ -116,6 +120,7 @@ export class AbilityManager {
       source.data.powerMarkers += powerValue;
       source.updateVisualMarkers();
       this.controller.addLog(`${source.data.name} gains ${powerValue} Power Markers from ${target.data.name}'s Power Value in Limbo.`);
+      this.syncBoardPresencePowerMarkers();
       return;
     }
 
@@ -208,8 +213,10 @@ export class AbilityManager {
 
       this.controller.addLog(`${source.data.name} places ${target.data.name} on top of its owner's deck`);
       const deck = target.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
-      const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = target.data;
+      const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, boardPresencePowerMarkers, ...baseData } = target.data;
       deck.push({ ...baseData });
+      this.stripBoardPresencePowerFromCard(target);
+      this.syncBoardPresencePowerMarkers();
       gsap.to(target.mesh.position, { y: 10, duration: 0.5, onComplete: () => {
         this.controller.disposeCard(target);
       }});
@@ -249,8 +256,10 @@ export class AbilityManager {
     else if (idxP !== -1) this.controller.playerBattlefield[idxP] = null;
     else if (idxE !== -1) this.controller.enemyBattlefield[idxE] = null;
     const deck = target.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
-    const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = target.data;
+    const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, boardPresencePowerMarkers, ...baseData } = target.data;
     deck.push({ ...baseData });
+    this.stripBoardPresencePowerFromCard(target);
+    this.syncBoardPresencePowerMarkers();
     this.controller.addLog(`${target.data.name} is placed on top of its owner's deck.`);
     gsap.to(target.mesh.position, { y: 10, duration: 0.5, onComplete: () => {
       this.controller.disposeCard(target);
@@ -261,6 +270,87 @@ export class AbilityManager {
   public countHorsemenInPlay(isEnemy: boolean): number {
     const all = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)].filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
     return all.filter(c => c.data.type === 'Horseman' && c.data.isEnemy === isEnemy).length;
+  }
+
+  private static readonly BOARD_PRESENCE_NAMES = new Set(['The Spinner', 'Omega', 'Hades']);
+
+  private isCardInPlayZone(card: CardEntity): boolean {
+    const bf = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield];
+    if (bf.some(c => c === card)) return true;
+    return this.controller.seals.some(s => s.champion === card);
+  }
+
+  /**
+   * Expected Power Marker contribution from board-count rules (Spinner / Omega / Hades).
+   * Only applies while the card is on the battlefield or a Seal champion and is face-up.
+   */
+  public computeExpectedBoardPresencePower(card: CardEntity): number {
+    if (!card.data.faceUp || !this.isCardInPlayZone(card)) return 0;
+    if (card.data.name === 'The Spinner') {
+      const all = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+        .filter(c => c !== null && (c as CardEntity).data.faceUp) as CardEntity[];
+      return all.filter(c => c.data.faction === card.data.faction).length;
+    }
+    if (card.data.name === 'Omega') {
+      const inPlay = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+        .filter(c => c !== null && (c as CardEntity).data.faceUp && c.data.faction === 'Lycan').length;
+      const inLimbo = [...this.controller.playerLimbo, ...this.controller.enemyLimbo]
+        .filter(c => c.data.faction === 'Lycan').length;
+      return inPlay + inLimbo;
+    }
+    if (card.data.name === 'Hades') {
+      return 2 * this.countHorsemenInPlay(card.data.isEnemy);
+    }
+    return 0;
+  }
+
+  /** Clear presence tracking on all card entities (after bulk power-marker wipes). */
+  public resetBoardPresencePowerTracking(): void {
+    const zones: (CardEntity | null | undefined)[][] = [
+      this.controller.playerBattlefield,
+      this.controller.enemyBattlefield,
+      this.controller.seals.map(s => s.champion),
+      this.controller.playerLimbo,
+      this.controller.enemyLimbo,
+      this.controller.playerGraveyard,
+      this.controller.enemyGraveyard
+    ];
+    for (const z of zones) {
+      for (const c of z) {
+        if (c?.data) c.data.boardPresencePowerMarkers = 0;
+      }
+    }
+  }
+
+  /** After all power markers on the board were cleared externally, re-apply Spinner/Omega/Hades portions. */
+  public afterBulkPowerMarkersCleared(): void {
+    this.resetBoardPresencePowerTracking();
+    this.syncBoardPresencePowerMarkers();
+  }
+
+  /** Remove the tracked board-presence portion from a card (e.g. leaving play). */
+  public stripBoardPresencePowerFromCard(card: CardEntity): void {
+    const t = card.data.boardPresencePowerMarkers ?? 0;
+    if (t) {
+      card.data.powerMarkers -= t;
+      card.data.boardPresencePowerMarkers = 0;
+      card.updateVisualMarkers();
+    }
+  }
+
+  /** Recompute Spinner / Omega / Hades power from current board + limbo; call after any relevant zone change. */
+  public syncBoardPresencePowerMarkers(): void {
+    const inPlay = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
+      .filter(c => c !== null) as CardEntity[];
+    for (const card of inPlay) {
+      if (!AbilityManager.BOARD_PRESENCE_NAMES.has(card.data.name)) continue;
+      const expected = this.computeExpectedBoardPresencePower(card);
+      const old = card.data.boardPresencePowerMarkers ?? 0;
+      if (expected === old) continue;
+      card.data.powerMarkers += expected - old;
+      card.data.boardPresencePowerMarkers = expected;
+      card.updateVisualMarkers();
+    }
   }
 
   /** Count Vampyres in play for Lord's Activate. With Duke in play (flipped), that side's creatures count as Vampyre. Only flipped cards count. */
@@ -634,6 +724,7 @@ export class AbilityManager {
       duration: 0.8
     });
     this.controller.updateState({}); // Refresh counts
+    this.syncBoardPresencePowerMarkers();
   }
 
   public async handleActivateAbility(source: CardEntity, isAI: boolean) {
@@ -646,8 +737,10 @@ export class AbilityManager {
         c.data.powerMarkers = 0;
         c.updateVisualMarkers();
       });
+      this.resetBoardPresencePowerTracking();
       source.data.powerMarkers += totalP;
       source.updateVisualMarkers();
+      this.syncBoardPresencePowerMarkers();
       this.controller.addLog(`${source.data.name} transfers all Power Markers in play to itself.`);
       return;
     }
@@ -687,6 +780,7 @@ export class AbilityManager {
           c.updateVisualMarkers();
         });
         this.controller.addLog(`The Almighty destroys all ${choice === 'power' ? 'Power' : 'Weakness'} Markers in play (${count} removed).`);
+        if (choice === 'power') this.afterBulkPowerMarkersCleared();
         return;
       }
       this.controller.updateState({
@@ -708,6 +802,7 @@ export class AbilityManager {
         c.updateVisualMarkers();
       });
       this.controller.addLog(`The Almighty destroys all ${typeName} Markers in play (${count} removed).`);
+      if (choice === 'power') this.afterBulkPowerMarkersCleared();
       return;
     }
 
@@ -792,6 +887,7 @@ export class AbilityManager {
           c.updateVisualMarkers();
         });
         this.controller.addLog(`${source.data.name} destroys all ${typeName(choice)} Markers in play (${count} removed).`);
+        if (choice === 'power') this.afterBulkPowerMarkersCleared();
         return;
       }
       this.controller.updateState({
@@ -811,6 +907,7 @@ export class AbilityManager {
         c.updateVisualMarkers();
       });
       this.controller.addLog(`${source.data.name} destroys all ${typeName(choice)} Markers in play (${count} removed).`);
+      if (choice === 'power') this.afterBulkPowerMarkersCleared();
       return;
     }
 

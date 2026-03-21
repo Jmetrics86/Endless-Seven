@@ -112,6 +112,7 @@ export class PhaseManager {
 
   public async startResolution() {
     this.controller.cardsThatBattledThisRound = [];
+    this.controller.abilityManager.syncBoardPresencePowerMarkers();
     this.controller.updateState({ currentPhase: Phase.RESOLUTION });
     this.controller.addLog("--- Resolution Phase Started ---");
     for (let i = 0; i < GAME_CONSTANTS.SEVEN; i++) {
@@ -303,24 +304,8 @@ export class PhaseManager {
         current.data.isActivatingAbility = false;
       }
 
-      // Faction Presence: The Spinner (Light) on Flip; Lord is Activate-only (handled in handleActivateAbility). Only flipped cards count.
-      if (current.data.name === "The Spinner") {
-        const count = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
-          .filter(c => c !== null && (c as CardEntity).data.faceUp && c.data.faction === current!.data.faction).length;
-        current.data.powerMarkers += count;
-        current.updateVisualMarkers();
-        this.controller.addLog(`${current.data.name} gains ${count} Power Markers from faction presence`);
-      }
-      if (current.data.name === "Omega") {
-        const inPlay = [...this.controller.playerBattlefield, ...this.controller.enemyBattlefield, ...this.controller.seals.map(s => s.champion)]
-          .filter(c => c !== null && (c as CardEntity).data.faceUp && c.data.faction === "Lycan").length;
-        const inLimbo = [...this.controller.playerLimbo, ...this.controller.enemyLimbo]
-          .filter(c => c.data.faction === "Lycan").length;
-        const count = inPlay + inLimbo;
-        current.data.powerMarkers += count;
-        current.updateVisualMarkers();
-        this.controller.addLog(`${current.data.name} gains ${count} Power Markers (+1 per Lycan in play and in Limbo)`);
-      }
+      // The Spinner / Omega / Hades: board-count Power Markers are applied via AbilityManager.syncBoardPresencePowerMarkers
+      // after Step B (see below) so Activate passes do not re-stack markers on champions with hasActivate.
 
       // Herald
       if (current.data.name === "Herald") {
@@ -504,13 +489,11 @@ export class PhaseManager {
         }
       }
 
-      // Hades: Flip = +2 Power per Horseman in play
+      // Hades: +2 Power per Horseman (tracked via syncBoardPresencePowerMarkers). Secondary: Limbo → deck.
       if (current.data.name === "Hades" && isFlipping) {
         const horsemanCount = this.controller.abilityManager.countHorsemenInPlay(current.data.isEnemy);
         const gain = 2 * horsemanCount;
-        current.data.powerMarkers += gain;
-        current.updateVisualMarkers();
-        this.controller.addLog(`${current.data.name} gains +2 Power per Horseman (${horsemanCount} in play) = ${gain} Power Marker(s).`);
+        this.controller.addLog(`${current.data.name} gains +2 Power per Horseman (${horsemanCount} in play) = ${gain} Power Marker(s) (updated with board state).`);
         // Secondary: Place any card from Limbo you control on top of your deck
         const limbo = current.data.isEnemy ? this.controller.enemyLimbo : this.controller.playerLimbo;
         if (limbo.length > 0) {
@@ -519,7 +502,7 @@ export class PhaseManager {
             const idx = limbo.indexOf(pick);
             limbo.splice(idx, 1);
             const deck = current.data.isEnemy ? this.controller.enemyDeck : this.controller.playerDeck;
-            const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, ...baseData } = pick.data;
+            const { powerMarkers, weaknessMarkers, faceUp, isInvincible, isSuppressed, boardPresencePowerMarkers, ...baseData } = pick.data;
             deck.push({ ...baseData });
             this.controller.disposeCard(pick);
             this.controller.addLog(`${current.data.name} places ${pick.data.name} from Limbo on top of deck.`);
@@ -535,6 +518,7 @@ export class PhaseManager {
               (this.controller as any).pendingAbilityData = { source: current, effect: 'hades_limbo_to_deck' };
             });
           }
+          this.controller.abilityManager.syncBoardPresencePowerMarkers();
         }
       }
 
@@ -557,6 +541,7 @@ export class PhaseManager {
 
       if (current.data.needsAllocation) {
         await this.controller.allocateCounters(current, side === 'enemy');
+        this.controller.abilityManager.syncBoardPresencePowerMarkers();
       }
       if (current.data.hasTargetedAbility && (isFlipping || !current.data.hasActivate)) {
         await this.controller.handleTargetedAbility(current, side === 'enemy');
@@ -583,6 +568,7 @@ export class PhaseManager {
 
     if (pCard) pCard.data.faceUp = true;
     if (eCard) eCard.data.faceUp = true;
+    this.controller.abilityManager.syncBoardPresencePowerMarkers();
 
     // Step C: Combat
     this.controller.updateState({ phaseStep: "Step C: Combat" });
@@ -1078,6 +1064,7 @@ export class PhaseManager {
     card.applyBackTextureIfNeeded(); // All cards share same back graphic
     // Ensure power/weakness marker visuals persist when card moves to seal (e.g. Alpha +2 from destroying enemy)
     card.updateVisualMarkers();
+    this.controller.abilityManager.syncBoardPresencePowerMarkers();
     gsap.to(card.mesh.position, {
       x: this.controller.seals[idx].mesh.position.x,
       y: 0.6,
