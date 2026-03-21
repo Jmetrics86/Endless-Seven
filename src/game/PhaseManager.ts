@@ -660,10 +660,14 @@ export class PhaseManager {
       const w0 = { x: winner.mesh.position.x, y: winner.mesh.position.y, z: winner.mesh.position.z };
       const l0 = { x: loser.mesh.position.x, y: loser.mesh.position.y, z: loser.mesh.position.z };
       const elevate = 0.85;
-      const bringFraction = 0.35; // move each card toward the midpoint
-
-      const impactZWinner = w0.z + (l0.z - w0.z) * bringFraction;
-      const impactZLoser = l0.z + (w0.z - l0.z) * bringFraction;
+      const halfDepth = GAME_CONSTANTS.CARD_H / 2;
+      const midZ = (w0.z + l0.z) / 2;
+      // Stop at edges so cards don't clip; high-z card moves to mid+half, low-z to mid-half
+      const impactZWinner = w0.z > l0.z ? midZ + halfDepth : midZ - halfDepth;
+      const impactZLoser = l0.z > w0.z ? midZ + halfDepth : midZ - halfDepth;
+      const rockBack = 0.28; // recoil distance after impact
+      const rockZWinner = w0.z > l0.z ? impactZWinner + rockBack : impactZWinner - rockBack;
+      const rockZLoser = l0.z > w0.z ? impactZLoser - rockBack : impactZLoser + rockBack;
 
       const dx = l0.x - w0.x;
       const dz = l0.z - w0.z;
@@ -680,17 +684,22 @@ export class PhaseManager {
       const lScale = (loser.mesh as any).scale;
       const lRot = (loser.mesh as any).rotation;
 
-      // Lift both up and bring together
-      gsap.to(winner.mesh.position, { y: w0.y + elevate, z: impactZWinner, duration: 0.18, ease: 'power2.out' });
-      gsap.to(loser.mesh.position, { y: l0.y + elevate, z: impactZLoser, duration: 0.18, ease: 'power2.out' });
+      // Lift both up and bring together with acceleration into impact (power2.in)
+      gsap.to(winner.mesh.position, { y: w0.y + elevate, z: impactZWinner, duration: 0.2, ease: 'power2.in' });
+      gsap.to(loser.mesh.position, { y: l0.y + elevate, z: impactZLoser, duration: 0.2, ease: 'power2.in' });
 
       // Optional "smash" scale pulse (skip in unit tests where mock cards don't have scale)
       if (wScale && lScale && typeof wScale.x === 'number' && typeof lScale.x === 'number') {
-        gsap.to(wScale, { x: wScale.x * 1.15, y: wScale.y * 1.15, z: wScale.z * 1.15, duration: 0.12, ease: 'power2.out', delay: 0.12 });
-        gsap.to(lScale, { x: lScale.x * 1.15, y: lScale.y * 1.15, z: lScale.z * 1.15, duration: 0.12, ease: 'power2.out', delay: 0.12 });
+        gsap.to(wScale, { x: wScale.x * 1.15, y: wScale.y * 1.15, z: wScale.z * 1.15, duration: 0.1, ease: 'power2.out', delay: 0.18 });
+        gsap.to(lScale, { x: lScale.x * 1.15, y: lScale.y * 1.15, z: lScale.z * 1.15, duration: 0.1, ease: 'power2.out', delay: 0.18 });
       }
 
       await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          // Rock back from impact
+          gsap.to(winner.mesh.position, { z: rockZWinner, duration: 0.08, ease: 'power2.out' });
+          gsap.to(loser.mesh.position, { z: rockZLoser, duration: 0.08, ease: 'power2.out' });
+        }, 200);
         setTimeout(() => {
           // Winner drops back to original slot; loser gets knocked away
           gsap.to(winner.mesh.position, { y: w0.y, z: w0.z, duration: 0.22, ease: 'power2.inOut' });
@@ -699,9 +708,9 @@ export class PhaseManager {
             gsap.to(lRot, { y: Math.random() * 0.6, z: Math.random() * 0.2, duration: 0.34, ease: 'power3.in' });
           }
 
-          // Total approx: 0.22 drop + 0.34 knock (triggered at ~0.22)
-          setTimeout(() => resolve(), 360);
-        }, 220);
+          // Total approx: 0.08 rock + 0.22 drop + 0.34 knock (triggered at ~0.28)
+          setTimeout(() => resolve(), 380);
+        }, 280);
       });
     };
 
@@ -709,10 +718,13 @@ export class PhaseManager {
       const a0 = { x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z };
       const d0 = { x: d.mesh.position.x, y: d.mesh.position.y, z: d.mesh.position.z };
       const elevate = 0.85;
-      const bringFraction = 0.35;
-
-      const impactZA = a0.z + (d0.z - a0.z) * bringFraction;
-      const impactZD = d0.z + (a0.z - d0.z) * bringFraction;
+      const halfDepth = GAME_CONSTANTS.CARD_H / 2;
+      const midZ = (a0.z + d0.z) / 2;
+      const impactZA = a0.z > d0.z ? midZ + halfDepth : midZ - halfDepth;
+      const impactZD = d0.z > a0.z ? midZ + halfDepth : midZ - halfDepth;
+      const rockBack = 0.28;
+      const rockZA = a0.z > d0.z ? impactZA + rockBack : impactZA - rockBack;
+      const rockZD = d0.z > a0.z ? impactZD + rockBack : impactZD - rockBack;
 
       const dxA = a0.x - d0.x;
       const dzA = a0.z - d0.z;
@@ -738,20 +750,24 @@ export class PhaseManager {
       const aScale = (a.mesh as any).scale;
       const dScale = (d.mesh as any).scale;
 
-      gsap.to(a.mesh.position, { y: a0.y + elevate, z: impactZA, duration: 0.18, ease: 'power2.out' });
-      gsap.to(d.mesh.position, { y: d0.y + elevate, z: impactZD, duration: 0.18, ease: 'power2.out' });
+      gsap.to(a.mesh.position, { y: a0.y + elevate, z: impactZA, duration: 0.2, ease: 'power2.in' });
+      gsap.to(d.mesh.position, { y: d0.y + elevate, z: impactZD, duration: 0.2, ease: 'power2.in' });
 
       if (aScale && dScale && typeof aScale.x === 'number' && typeof dScale.x === 'number') {
-        gsap.to(aScale, { x: aScale.x * 1.12, y: aScale.y * 1.12, z: aScale.z * 1.12, duration: 0.12, ease: 'power2.out', delay: 0.12 });
-        gsap.to(dScale, { x: dScale.x * 1.12, y: dScale.y * 1.12, z: dScale.z * 1.12, duration: 0.12, ease: 'power2.out', delay: 0.12 });
+        gsap.to(aScale, { x: aScale.x * 1.12, y: aScale.y * 1.12, z: aScale.z * 1.12, duration: 0.1, ease: 'power2.out', delay: 0.18 });
+        gsap.to(dScale, { x: dScale.x * 1.12, y: dScale.y * 1.12, z: dScale.z * 1.12, duration: 0.1, ease: 'power2.out', delay: 0.18 });
       }
 
       await new Promise<void>((resolve) => {
         setTimeout(() => {
+          gsap.to(a.mesh.position, { z: rockZA, duration: 0.08, ease: 'power2.out' });
+          gsap.to(d.mesh.position, { z: rockZD, duration: 0.08, ease: 'power2.out' });
+        }, 200);
+        setTimeout(() => {
           gsap.to(a.mesh.position, { x: knockAX, y: knockAY, z: knockAZ, duration: 0.42, ease: 'power3.in' });
           gsap.to(d.mesh.position, { x: knockDX, y: knockDY, z: knockDZ, duration: 0.42, ease: 'power3.in' });
-          setTimeout(() => resolve(), 460);
-        }, 220);
+          setTimeout(() => resolve(), 440);
+        }, 280);
       });
     };
 
