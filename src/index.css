@@ -93,3 +93,56 @@ html[data-theme="light"] .text-gray-500 {
 html[data-theme="light"] .text-gray-200 {
   color: #1e293b;
 }
+
+/* Game over — event log scrollbar */
+.game-over-log-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 242, 255, 0.45) rgba(255, 255, 255, 0.06);
+}
+
+.game-over-log-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+
+.game-over-log-scroll::-webkit-scrollbar-track {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(0, 242, 255, 0.03) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  border-radius: 6px;
+  margin: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.game-over-log-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(0, 242, 255, 0.55), rgba(0, 180, 220, 0.35));
+  border-radius: 6px;
+  border: 1px solid rgba(0, 242, 255, 0.25);
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.15);
+}
+
+.game-over-log-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(0, 242, 255, 0.75), rgba(0, 220, 255, 0.5));
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.25);
+}
+
+html[data-theme="light"] .game-over-log-scroll {
+  scrollbar-color: rgba(59, 130, 246, 0.5) rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .game-over-log-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .game-over-log-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.55), rgba(37, 99, 235, 0.4));
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.2);
+}
+
+html[data-theme="light"] .game-over-log-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.75), rgba(37, 99, 235, 0.55));
+}

@@ -64,4 +64,4 @@ export const GAME_CONSTANTS = {
   TABLE_PLAY_DEPTH: 20
 };
 
-export const GAME_VERSION = "v0.1.3";
+export const GAME_VERSION = "v0.1.4";

@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { GameEndStats } from './achievements/types';
+
 export enum Alignment {
   LIGHT = 'LIGHT',
   DARK = 'DARK',
@@ -105,6 +107,10 @@ export interface GameState {
   gameOverResult?: 'player' | 'enemy' | 'draw';
   /** Human-readable win condition that was enacted (e.g. "Majority of Seals (4 of 7)", "Horseman (4 Horsemen + Champion on Seal)"). */
   gameOverWinCondition?: string;
+  /** Snapshot at game end for achievements / recap. */
+  gameOverStats?: GameEndStats;
+  /** Achievement ids newly unlocked this game (cookie already updated). */
+  gameOverNewAchievements?: string[];
   /** When hovering over a Limbo or Graveyard zone, shows which zone and card count. */
   hoveredZone?: { zone: 'playerLimbo' | 'enemyLimbo' | 'playerGraveyard' | 'enemyGraveyard'; count: number } | null;
 }

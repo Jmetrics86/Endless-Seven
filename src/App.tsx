@@ -11,6 +11,7 @@ import { Alignment, Phase, GameState, HoveredCardInfo } from './types';
 import { cardArtUrl } from './cardArtPaths';
 import type { EnvironmentTheme } from './theme';
 import { THEME_STORAGE_KEY } from './theme';
+import { GameOverAchievements } from './components/GameOverAchievements';
 
 function loadStoredTheme(): EnvironmentTheme {
   try {
@@ -359,36 +360,80 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-6"
+            className="absolute inset-0 z-[100] flex flex-col bg-black/92 backdrop-blur-md max-lg:overflow-y-auto lg:overflow-hidden p-3 sm:p-5"
           >
-            <h1 className="text-6xl mb-4 tracking-[15px]">THE CYCLE ENDS</h1>
-            <p className="text-xl text-gray-400 text-center max-w-2xl mb-2">{gameState.instructionText}</p>
-            {gameState.gameOverWinCondition && (
-              <p className="text-sm text-[#00f2ff]/90 uppercase tracking-widest mb-8">
-                Win condition: {gameState.gameOverWinCondition}
+            <header className="shrink-0 text-center max-w-4xl mx-auto w-full pb-3 border-b border-white/5">
+              <h1 className="text-2xl sm:text-4xl md:text-5xl tracking-[0.15em] sm:tracking-[0.25em]">
+                THE CYCLE ENDS
+              </h1>
+              {gameState.gameOverResult === 'player' && (
+                <p className="text-[0.55rem] uppercase tracking-[0.35em] text-[#00f2ff]/85 mt-2">Victory</p>
+              )}
+              {gameState.gameOverResult === 'enemy' && (
+                <p className="text-[0.55rem] uppercase tracking-[0.35em] text-[#ff0044]/85 mt-2">Defeat</p>
+              )}
+              {gameState.gameOverResult === 'draw' && (
+                <p className="text-[0.55rem] uppercase tracking-[0.35em] text-gray-400 mt-2">Stalemate</p>
+              )}
+              <p className="text-sm sm:text-base text-gray-400 max-w-2xl mx-auto mt-2 leading-snug px-2">
+                {gameState.instructionText}
               </p>
-            )}
-            {gameState.logs.length > 0 && (
-              <div className="w-full max-w-2xl max-h-[40vh] mb-8 overflow-hidden flex flex-col rounded-lg border border-white/10 bg-black/40">
-                <div className="text-[0.6rem] text-gray-500 uppercase tracking-widest px-4 py-2 border-b border-white/10 shrink-0">
-                  Event log
+              {gameState.gameOverWinCondition && (
+                <p className="text-[0.65rem] sm:text-xs text-[#00f2ff]/90 uppercase tracking-widest mt-2 px-2">
+                  Win condition: {gameState.gameOverWinCondition}
+                </p>
+              )}
+            </header>
+
+            <div className="flex-1 min-h-0 w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(260px,34%)_1fr] gap-4 lg:gap-6 pt-4">
+              {/* Left: achievements — full list visible, no internal scroll */}
+              <aside className="min-h-0 flex flex-col lg:pr-2 lg:overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 pb-4 lg:pb-0">
+                {gameState.gameOverResult && (
+                  <GameOverAchievements
+                    result={gameState.gameOverResult}
+                    gameOverStats={gameState.gameOverStats}
+                    newThisSession={gameState.gameOverNewAchievements ?? []}
+                    className="h-full min-h-0"
+                  />
+                )}
+              </aside>
+
+              {/* Right: event log — scrolls with styled bar */}
+              <section className="min-h-0 flex flex-col flex-1">
+                <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[#00f2ff]/20 bg-black/50 shadow-[inset_0_1px_0_rgba(0,242,255,0.08)] overflow-hidden">
+                  <div className="shrink-0 text-[0.6rem] text-[#00f2ff]/70 uppercase tracking-[0.25em] px-4 py-2.5 border-b border-white/10 bg-white/[0.03]">
+                    Event log
+                  </div>
+                  <div className="game-over-log-scroll flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 min-h-[12rem] lg:min-h-0">
+                    {gameState.logs.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {gameState.logs.map((log, i) => (
+                          <div
+                            key={i}
+                            className="text-[0.68rem] sm:text-[0.7rem] leading-relaxed text-gray-300 font-mono pl-1 border-l-2 border-[#00f2ff]/20 hover:border-[#00f2ff]/45 transition-colors"
+                          >
+                            <span className="text-[#00f2ff]/80 mr-2 select-none">»</span>
+                            {log}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[0.65rem] text-gray-600 italic">No log entries.</p>
+                    )}
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-1.5 scrollbar-thin">
-                  {gameState.logs.map((log, i) => (
-                    <div key={i} className="text-[0.7rem] leading-relaxed text-gray-300 font-mono">
-                      <span className="text-[#00f2ff] mr-2">»</span>
-                      {log}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => window.location.reload()}
-              className="px-12 py-4 border border-white/20 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-lg tracking-widest uppercase font-bold"
-            >
-              Begin New Cycle
-            </button>
+              </section>
+            </div>
+
+            <footer className="shrink-0 flex justify-center pt-4 pb-1">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="px-10 sm:px-14 py-2.5 sm:py-3 border border-white/25 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-sm sm:text-base tracking-[0.2em] uppercase font-bold"
+              >
+                Begin New Cycle
+              </button>
+            </footer>
           </motion.div>
         )}
       </AnimatePresence>

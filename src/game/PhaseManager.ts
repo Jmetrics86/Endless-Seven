@@ -1,4 +1,5 @@
 import gsap from 'gsap';
+import { recordGameEndAndPersist } from '../achievements/storage';
 import { Phase, Alignment, CardData } from '../types';
 import { CardEntity, getOrLoadBackTexture } from '../entities/CardEntity';
 import { IGameController } from './interfaces';
@@ -1037,11 +1038,21 @@ export class PhaseManager {
       result = 'draw';
     }
 
-    this.controller.updateState({ 
-      currentPhase: Phase.GAME_OVER, 
+    const gameOverStats = {
+      result,
+      playerSealCount: pCount,
+      enemySealCount: eCount,
+      roundEnded: this.controller.state.currentRound,
+    };
+    const gameOverNewAchievements = recordGameEndAndPersist(gameOverStats);
+
+    this.controller.updateState({
+      currentPhase: Phase.GAME_OVER,
       instructionText: body,
       gameOverResult: result,
-      gameOverWinCondition: winCondition ?? (result === 'draw' ? "Draw" : "Majority of Seals")
+      gameOverWinCondition: winCondition ?? (result === 'draw' ? 'Draw' : 'Majority of Seals'),
+      gameOverStats,
+      gameOverNewAchievements,
     });
   }
 
