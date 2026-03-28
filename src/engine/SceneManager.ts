@@ -75,7 +75,7 @@ export class SceneManager {
   public setTheme(theme: EnvironmentTheme) {
     this._theme = theme;
     const colors = ENV_THEME_COLORS[theme];
-    this.scene.background.setHex(colors.sceneBg);
+    (this.scene.background as THREE.Color).setHex(colors.sceneBg);
     (this.scene.fog as THREE.FogExp2).color.setHex(colors.sceneFog);
   }
 

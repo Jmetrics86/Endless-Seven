@@ -135,6 +135,7 @@ function createCtrl() {
     zoomIn: vi.fn(),
     zoomOut: vi.fn(),
     handleBattle: vi.fn(),
+    showCombatDamageFloats: vi.fn(),
     handleSiege: vi.fn(),
     ascendToSeal: vi.fn(),
     checkGameOver: vi.fn(),

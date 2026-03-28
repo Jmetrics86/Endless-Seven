@@ -20,6 +20,7 @@ import { AbilityManager } from './AbilityManager';
 import { PhaseManager } from './PhaseManager';
 import { IGameController } from './interfaces';
 import { shouldEnemyUseLuna } from './EnemyEasyAI';
+import { scheduleCombatExchangeFloats } from '../engine/FloatingCombatNumbers';
 
 /** Temporary: zone/label tuning. Remove ZoneTuningGui and use final values in createPile/setupPiles when done. */
 export interface ZoneTuningParams {
@@ -698,6 +699,15 @@ export class GameController implements IGameController {
 
   public async handleBattle(attacker: CardEntity, defender: CardEntity, idx: number, isAgainstChamp: boolean): Promise<boolean> {
     return await this.phaseManager.handleBattle(attacker, defender, idx, isAgainstChamp);
+  }
+
+  public showCombatDamageFloats(
+    attacker: CardEntity,
+    defender: CardEntity,
+    attackerPower: number,
+    defenderPower: number
+  ): void {
+    scheduleCombatExchangeFloats(this.sceneManager.scene, attacker, defender, attackerPower, defenderPower);
   }
 
   public destroyCard(card: CardEntity, isEnemy: boolean, idx: number, isAgainstChamp: boolean = false, killedBy?: { cardName: string; cause: 'combat' | 'ability' }) {

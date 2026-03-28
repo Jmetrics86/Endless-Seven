@@ -34,6 +34,7 @@ function input(
   label: string,
   key: keyof ZoneTuningParams,
   controller: GameController,
+  codePre: HTMLPreElement,
   step: string = '0.1'
 ): HTMLDivElement {
   const row = document.createElement('div');
@@ -85,44 +86,48 @@ export function createZoneTuningGui(controller: GameController): () => void {
   title.setAttribute('style', 'font-weight: bold; margin-bottom: 10px; font-size: 13px;');
   wrap.appendChild(title);
 
+  const codePre = document.createElement('pre');
+  codePre.setAttribute(
+    'style',
+    'background: #1a1a22; padding: 8px; border-radius: 4px; font-size: 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;'
+  );
+
   const sub1 = document.createElement('div');
   sub1.setAttribute('style', 'margin-bottom: 8px; color: #aaa; font-size: 11px;');
   sub1.textContent = 'Label';
   wrap.appendChild(sub1);
-  wrap.appendChild(input('Label width', 'labelWidth', controller));
-  wrap.appendChild(input('Label height', 'labelHeight', controller));
-  wrap.appendChild(input('Label offset Z', 'labelOffsetZ', controller));
+  wrap.appendChild(input('Label width', 'labelWidth', controller, codePre));
+  wrap.appendChild(input('Label height', 'labelHeight', controller, codePre));
+  wrap.appendChild(input('Label offset Z', 'labelOffsetZ', controller, codePre));
 
   const sub2 = document.createElement('div');
   sub2.setAttribute('style', 'margin: 12px 0 8px; color: #aaa; font-size: 11px;');
   sub2.textContent = 'Deck zone position';
   wrap.appendChild(sub2);
-  wrap.appendChild(input('deckX', 'deckX', controller));
-  wrap.appendChild(input('deckZ', 'deckZ', controller));
-  wrap.appendChild(input('deckY', 'deckY', controller, '0.01'));
+  wrap.appendChild(input('deckX', 'deckX', controller, codePre));
+  wrap.appendChild(input('deckZ', 'deckZ', controller, codePre));
+  wrap.appendChild(input('deckY', 'deckY', controller, codePre, '0.01'));
 
   const sub3 = document.createElement('div');
   sub3.setAttribute('style', 'margin: 12px 0 8px; color: #aaa; font-size: 11px;');
   sub3.textContent = 'Limbo zone position';
   wrap.appendChild(sub3);
-  wrap.appendChild(input('limboX', 'limboX', controller));
-  wrap.appendChild(input('limboZ', 'limboZ', controller));
-  wrap.appendChild(input('limboY', 'limboY', controller, '0.01'));
+  wrap.appendChild(input('limboX', 'limboX', controller, codePre));
+  wrap.appendChild(input('limboZ', 'limboZ', controller, codePre));
+  wrap.appendChild(input('limboY', 'limboY', controller, codePre, '0.01'));
 
   const sub4 = document.createElement('div');
   sub4.setAttribute('style', 'margin: 12px 0 8px; color: #aaa; font-size: 11px;');
   sub4.textContent = 'Grave zone position';
   wrap.appendChild(sub4);
-  wrap.appendChild(input('graveX', 'graveX', controller));
-  wrap.appendChild(input('graveZ', 'graveZ', controller));
-  wrap.appendChild(input('graveY', 'graveY', controller, '0.01'));
+  wrap.appendChild(input('graveX', 'graveX', controller, codePre));
+  wrap.appendChild(input('graveZ', 'graveZ', controller, codePre));
+  wrap.appendChild(input('graveY', 'graveY', controller, codePre, '0.01'));
 
   const codeLabel = document.createElement('div');
   codeLabel.setAttribute('style', 'margin: 14px 0 6px; color: #8f8; font-size: 11px;');
   codeLabel.textContent = 'Recommended final code (copy when done, then remove this GUI):';
   wrap.appendChild(codeLabel);
-  const codePre = document.createElement('pre');
-  codePre.setAttribute('style', 'background: #1a1a22; padding: 8px; border-radius: 4px; font-size: 10px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 0;');
   wrap.appendChild(codePre);
   updateCodeOutput(controller, codePre);
 

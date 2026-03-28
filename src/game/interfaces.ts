@@ -48,6 +48,8 @@ export interface IGameController {
   zoomIn(idx: number): void;
   zoomOut(): void;
   handleBattle(attacker: CardEntity, defender: CardEntity, idx: number, isAgainstChamp: boolean): Promise<boolean>;
+  /** 3D floating combat numbers at impact (white = dealt, red = taken). */
+  showCombatDamageFloats(attacker: CardEntity, defender: CardEntity, attackerPower: number, defenderPower: number): void;
   handleSiege(idx: number, card: CardEntity | null, isPlayer: boolean): Promise<void>;
   ascendToSeal(card: CardEntity, idx: number): void;
   checkGameOver(): void;

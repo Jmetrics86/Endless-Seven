@@ -801,6 +801,7 @@ export class PhaseManager {
         this.controller.addLog(`${defender.data.name} cannot be destroyed by ${attacker.data.name} (attacker has Weakness Markers).`);
         stymied = true;
       } else if (!defender.data.isInvincible && !isDProtected) {
+        this.controller.showCombatDamageFloats(attacker, defender, aPow, dPow);
         await playCombatSmashWinnerLoser(attacker, defender);
         this.controller.abilityManager.handleFinalAct(defender, attacker);
         if (elderAttacker) sendToDeckInstead(defender);
@@ -815,6 +816,7 @@ export class PhaseManager {
         this.controller.addLog(`${attacker.data.name} cannot be destroyed by ${defender.data.name} (attacker has Weakness Markers).`);
         stymied = true;
       } else if (!attacker.data.isInvincible && !isAProtected) {
+        this.controller.showCombatDamageFloats(attacker, defender, aPow, dPow);
         await playCombatSmashWinnerLoser(defender, attacker);
         this.controller.abilityManager.handleFinalAct(attacker, defender);
         if (elderDefender) sendToDeckInstead(attacker);
@@ -831,6 +833,7 @@ export class PhaseManager {
       const defenderWillDie = !wrathDefenderCannotBeDestroyedByAttacker && !defender.data.isInvincible && !isDProtected;
 
       if (attackerWillDie || defenderWillDie) {
+        this.controller.showCombatDamageFloats(attacker, defender, aPow, dPow);
         if (attackerWillDie && !defenderWillDie) await playCombatSmashWinnerLoser(defender, attacker);
         else if (defenderWillDie && !attackerWillDie) await playCombatSmashWinnerLoser(attacker, defender);
         else await playCombatSmashMutual(attacker, defender);
