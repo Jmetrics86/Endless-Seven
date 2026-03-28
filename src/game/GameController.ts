@@ -21,6 +21,7 @@ import { PhaseManager } from './PhaseManager';
 import { IGameController } from './interfaces';
 import { shouldEnemyUseLuna } from './EnemyEasyAI';
 import { scheduleCombatExchangeFloats } from '../engine/FloatingCombatNumbers';
+import { executePrepUndoEntry, type PrepUndoEntry } from './prepUndo';
 
 /** Temporary: zone/label tuning. Remove ZoneTuningGui and use final values in createPile/setupPiles when done. */
 export interface ZoneTuningParams {
@@ -85,6 +86,8 @@ export class GameController implements IGameController {
   public currentResolvingSealIndex: number = -1;
   private selectedObject: CardEntity | null = null;
   public pendingBaronSwapSlot: number | null = null;
+
+  private prepUndoStack: PrepUndoEntry[] = [];
 
   public pendingAbilityData: any = null;
   public resolutionCallback: (() => void) | null = null;
@@ -710,6 +713,48 @@ export class GameController implements IGameController {
     scheduleCombatExchangeFloats(this.sceneManager.scene, attacker, defender, attackerPower, defenderPower);
   }
 
+  public clearPrepUndoStack(): void {
+    this.prepUndoStack = [];
+  }
+
+  /** Prep only: stack undo, or clear hand selection / Baron swap pick. */
+  public canUndoPrep(): boolean {
+    return (
+      this.state.currentPhase === Phase.PREP &&
+      !this.isProcessing &&
+      (this.prepUndoStack.length > 0 ||
+        this.pendingBaronSwapSlot !== null ||
+        this.activeSelection !== null)
+    );
+  }
+
+  public undoLastPrepAction(): void {
+    if (this.state.currentPhase !== Phase.PREP) {
+      this.addLog('Undo is only available during Prep.');
+      return;
+    }
+    if (this.isProcessing) return;
+
+    if (this.prepUndoStack.length > 0) {
+      const entry = this.prepUndoStack.pop()!;
+      executePrepUndoEntry(this, entry);
+      this.addLog('Undid last Prep action.');
+      return;
+    }
+
+    if (this.pendingBaronSwapSlot !== null) {
+      this.pendingBaronSwapSlot = null;
+      this.updateState({ instructionText: '' });
+      return;
+    }
+
+    if (this.activeSelection !== null) {
+      this.clearCardHoverLiftTarget();
+      this.activeSelection = null;
+      this.updateState({});
+    }
+  }
+
   public destroyCard(card: CardEntity, isEnemy: boolean, idx: number, isAgainstChamp: boolean = false, killedBy?: { cardName: string; cause: 'combat' | 'ability' }) {
     if (killedBy) {
       const msg = killedBy.cause === 'combat'
@@ -1022,6 +1067,7 @@ export class GameController implements IGameController {
             gsap.to(card.mesh.rotation, { x: Math.PI, y: 0, z: 0, duration: 0.4 });
             card.applyBackTextureIfNeeded();
             this.addLog(`Baron swaps with ${card.data.name} in Limbo.`);
+            this.prepUndoStack.push({ type: 'baron_swap', slotIndex: slot, baron, limboCard: card });
             this.pendingBaronSwapSlot = null;
             this.updateState({ instructionText: '' });
             this.abilityManager.syncBoardPresencePowerMarkers();
@@ -1050,6 +1096,7 @@ export class GameController implements IGameController {
         const picked = this.findCardEntityFromObject(handIntersects[0].object, this.playerHand);
         this.clearCardHoverLiftTarget();
         this.activeSelection = picked;
+        this.updateState({});
         return;
       }
 
@@ -1074,7 +1121,9 @@ export class GameController implements IGameController {
             gsap.to(card.mesh.rotation, { x: Math.PI, y: 0, z: 0, duration: 0.5 });
             card.applyBackTextureIfNeeded();
             this.activeSelection = null;
+            this.prepUndoStack.push({ type: 'place', slotIndex: idx, card });
             this.abilityManager.syncBoardPresencePowerMarkers();
+            this.updateState({});
           }
         }
       }

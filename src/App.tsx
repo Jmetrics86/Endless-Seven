@@ -83,6 +83,10 @@ export default function App() {
     gameRef.current?.endPrep();
   };
 
+  const handlePrepBack = () => {
+    gameRef.current?.undoLastPrepAction();
+  };
+
   const handleFinishCounters = () => {
     gameRef.current?.finishCounters();
   };
@@ -254,12 +258,23 @@ export default function App() {
                 </div>
               </div>
               {gameState.currentPhase === Phase.PREP && (
-                <button
-                  onClick={handleEndPrep}
-                  className="pointer-events-auto px-6 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-xs tracking-widest uppercase font-bold"
-                >
-                  End Prep Phase
-                </button>
+                <div className="flex flex-wrap items-center justify-end gap-2 pointer-events-auto">
+                  <button
+                    type="button"
+                    onClick={handlePrepBack}
+                    disabled={!gameRef.current?.canUndoPrep()}
+                    className="px-4 py-2 bg-white/5 border border-white/20 hover:border-amber-400/80 hover:text-amber-200 transition-all text-xs tracking-widest uppercase font-bold disabled:opacity-40 disabled:pointer-events-none disabled:hover:border-white/20 disabled:hover:text-inherit"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEndPrep}
+                    className="px-6 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-xs tracking-widest uppercase font-bold"
+                  >
+                    End Prep Phase
+                  </button>
+                </div>
               )}
             </div>
 

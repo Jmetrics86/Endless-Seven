@@ -12,12 +12,14 @@ import {
   preferEnemyFirstWhenFlipPowerTied,
   vacantSlotPriorityForReinforce,
 } from './EnemyEasyAI';
+import { tweenPlayerHandCardToPrepPose } from './prepHandLayout';
 
 export class PhaseManager {
   constructor(private controller: IGameController) {}
 
   public async startPrepPhase() {
     if (this.controller.isProcessing) return;
+    (this.controller as { clearPrepUndoStack?: () => void }).clearPrepUndoStack?.();
     this.controller.isProcessing = true;
     this.controller.addLog(`--- Round ${this.controller.state.currentRound} Prep Phase ---`);
     this.controller.updateState({ currentPhase: Phase.PREP, phaseStep: 'Step 1: Draw Hand', lockedSealIndex: -1 });
@@ -38,15 +40,8 @@ export class PhaseManager {
       this.controller.playerHand.push(card);
       card.applyBackTextureIfNeeded(); // All cards share same back graphic; ensure it is applied as soon as ready
 
-      const offset = (i - 3.5);
-      gsap.to(card.mesh.position, {
-        x: offset * 2.15,
-        y: 12,
-        z: 21 + (Math.abs(offset) * 0.3),
-        duration: 0.6,
-        ease: "power2.out"
-      });
-      gsap.to(card.mesh.rotation, { x: 0.85, y: offset * 0.06, duration: 0.6 });
+      const handIdx = this.controller.playerHand.length - 1;
+      tweenPlayerHandCardToPrepPose(card, handIdx, 0.6);
       await new Promise(r => setTimeout(r, 100));
     }
 
@@ -105,6 +100,7 @@ export class PhaseManager {
 
   public endPrep() {
     if (this.controller.isProcessing) return;
+    (this.controller as { clearPrepUndoStack?: () => void }).clearPrepUndoStack?.();
     this.controller.isProcessing = true;
     (this.controller as any).pendingBaronSwapSlot = null;
     this.controller.addLog("Ending Prep Phase. Purging hand...");
