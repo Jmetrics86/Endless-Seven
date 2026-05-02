@@ -65,3 +65,17 @@ tmp/
 # package-lock.json
 # yarn.lock
 # pnpm-lock.yaml
+
+# Android (native app under android/)
+android/.gradle/
+android/**/build/
+android/**/.cxx/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/**/*.apk
+android/**/*.aab
+*.jks
+*.keystore
+!android/**/debug.keystore

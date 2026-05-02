@@ -1,16 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-cinzel: "Cinzel", serif;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
-
 /* Dark mode: slate gray + deep red */
 body {
   margin: 0;
   padding: 0;
   overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
   background: #1e293b;
   color: #e2e8f0;
 }

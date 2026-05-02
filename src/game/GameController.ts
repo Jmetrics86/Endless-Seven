@@ -906,7 +906,7 @@ export class GameController implements IGameController {
     this.updateState({});
   }
 
-  private handleMouseMove(event: MouseEvent) {
+  private handleMouseMove(event: MouseEvent | PointerEvent) {
     // When a decision or targeting prompt is active, still allow card hover preview but don't overwrite instruction text
     const promptActive = !!this.state.decisionContext ||
       this.state.currentPhase === Phase.ABILITY_TARGETING ||
@@ -1048,7 +1048,7 @@ export class GameController implements IGameController {
     }
   }
 
-  private async handleMouseDown(event: MouseEvent) {
+  private async handleMouseDown(event: MouseEvent | PointerEvent) {
     if (this.state.currentPhase === Phase.PREP) {
       const limboIntersects = this.inputHandler.raycaster.intersectObjects(this.playerLimbo.map(c => c.mesh), true);
       if (limboIntersects.length > 0) {

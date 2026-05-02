@@ -9,7 +9,11 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "build:android:web": "cross-env VITE_BASE=./ vite build --outDir android/app/src/main/assets/web",
     "build:pages": "cross-env VITE_BASE=/Endless-Seven/ vite build",
+    "android:prepare": "npm run build:android:web",
+    "android:debug": "npm run build:android:web && cd android && gradlew.bat assembleDebug",
+    "android:release": "npm run build:android:web && cd android && gradlew.bat bundleRelease",
     "deploy": "npm run build:pages && gh-pages -d dist",
     "preview": "vite preview",
     "clean": "rm -rf dist",

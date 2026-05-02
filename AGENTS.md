@@ -21,3 +21,9 @@ Standard commands are in `package.json` scripts:
 - `better-sqlite3` and `express` are listed as dependencies but are not actively used at runtime; `npm install` may emit native-addon warnings for `better-sqlite3` which are safe to ignore.
 - The Electron-related scripts (`electron:dev`, `electron:build`) require a display server and are not needed for web development or testing.
 - Lint (`tsc --noEmit`) exits with errors (exit code 2) due to pre-existing type issues in test mocks and a few source files. This is the repo's baseline state.
+
+### Android app (separate product tree)
+
+- **Location:** [`android/`](android/) — Kotlin/Compose shell + `WebView` packaging for the Three.js board from web assets (see [`android/README.md`](android/README.md)).
+- **Build:** Run `npm run build:android:web` at repo root, then from `android/`, run `gradlew.bat assembleDebug` (Windows) or `./gradlew assembleDebug` (Unix).
+- **Play Store:** See [`android/PLAY_STORE_CHECKLIST.md`](android/PLAY_STORE_CHECKLIST.md).
