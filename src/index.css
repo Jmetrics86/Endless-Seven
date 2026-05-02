@@ -1,6 +1,27 @@
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');
 @import "tailwindcss";
 
+/* HUD compact: narrow OR short viewport (phone landscape / split-screen). */
+@custom-variant hud-compact {
+  @media (max-width: 1023px), (max-height: 560px) {
+    @slot;
+  }
+}
+
+/* True desktop HUD: roomy in both dimensions. */
+@custom-variant desktop-hud {
+  @media (min-width: 1024px) and (min-height: 561px) {
+    @slot;
+  }
+}
+
+/* Very shallow landscape (foldables / chrome UI); optional tweaks in JSX. */
+@custom-variant landscape-short {
+  @media (orientation: landscape) and (max-height: 480px) {
+    @slot;
+  }
+}
+
 @theme {
   --font-cinzel: "Cinzel", serif;
 }
@@ -16,6 +37,17 @@ body {
   user-select: none;
   background: #1e293b;
   color: #e2e8f0;
+}
+
+/* Full viewport incl. mobile dynamic toolbar; pairs with viewport-fit=cover */
+#root {
+  min-height: 100dvh;
+  box-sizing: border-box;
+}
+
+/* Faster taps + no double-tap zoom on HUD controls (body uses touch-action: none globally). */
+.touch-manipulation {
+  touch-action: manipulation;
 }
 
 html[data-theme="light"] body {

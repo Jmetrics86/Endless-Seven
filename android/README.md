@@ -19,7 +19,18 @@ Android app for **Endless Seven**, kept separate from the TypeScript / React / V
 
 ## Build and run
 
-Requirements: **JDK 17**, **Android SDK** (via Android Studio).
+Requirements: **JDK 17**, **Android SDK** (Android Studio or command-line tools).
+
+### One-command flow (recommended)
+
+From the **repository root**:
+
+| Goal | Command | Output |
+|------|---------|--------|
+| **Debug APK** (fresh web bundle + installable APK) | `npm run android:debug` | `android/app/build/outputs/apk/debug/app-debug.apk` |
+| **Release AAB** (Play Console; needs signing configured) | `npm run android:release` | `android/app/build/outputs/bundle/release/app-release.aab` |
+
+Underlying steps (equivalent to `android:debug`):
 
 ```bat
 :: from repo root, build mobile web assets
@@ -30,27 +41,40 @@ cd android
 gradlew.bat assembleDebug
 ```
 
-Or from repo root in one step:
+On macOS/Linux, use `./gradlew assembleDebug` after `npm run build:android:web`.
 
-```bat
-npm run android:debug
+### Prerequisites (CLI / headless consistency)
+
+Gradle must resolve an SDK directory. Prefer **`android/local.properties`** (normally **not committed**):
+
+```properties
+sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk
 ```
 
-Release **AAB** for Play Console:
+Use forward slashes or escaped Windows paths per [Android docs](https://developer.android.com/studio/build#properties-files). Alternatively set **`ANDROID_HOME`** / **`ANDROID_SDK_ROOT`** to the same SDK root (Studio usually does this).
 
-```bat
-:: ensure latest web assets are packaged first
-npm run build:android:web
+**JDK:** Set **`JAVA_HOME`** to JDK 17 and ensure `java` is on `PATH`.
 
-cd android
-gradlew.bat bundleRelease
+**First-time SDK packages (command-line tools):** Accept licenses once, then install API **35** tooling to match `compileSdk`:
+
+```powershell
+$sdk="$env:LOCALAPPDATA\Android\Sdk"
+$sm="$sdk\cmdline-tools\latest\bin\sdkmanager.bat"
+$pipe = @(for ($i=0; $i -lt 200; $i++) { 'y' }) -join "`n"; $pipe | & $sm --sdk_root="$sdk" --licenses
+& $sm --sdk_root="$sdk" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 ```
 
-Or from repo root in one step:
+Gradle may still auto-install older build-tools (e.g. 34); that is normal.
 
-```bat
-npm run android:release
-```
+### APK / bundle locations (verify builds)
+
+After a successful run:
+
+| Variant | Typical path |
+|---------|----------------|
+| Debug APK | `app/build/outputs/apk/debug/app-debug.apk` |
+| Release **unsigned** APK | `app/build/outputs/apk/release/app-release-unsigned.apk` *(only after `assembleRelease`; no signing in `build.gradle.kts` by default)* |
+| Release bundle (AAB) | `app/build/outputs/bundle/release/app-release.aab` *(after `bundleRelease`; configure signing for store uploads)* |
 
 Open **`android/`** in Android Studio for emulators, signing, and Play uploads.
 

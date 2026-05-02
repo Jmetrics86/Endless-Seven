@@ -14,6 +14,15 @@ export class SceneManager {
   public cameraTarget: THREE.Vector3;
   private _theme: EnvironmentTheme = 'dark';
 
+  /** Stabilized resize handler so removeEventListener works. */
+  private readonly onResizeBound = () => this.onWindowResize();
+
+  private static readonly CAMERA_DEFAULT = { fov: 45, y: 28, z: 32 };
+  /** Pull back on short layouts (phone landscape WebView uses min dimension). */
+  private static readonly CAMERA_COMPACT = { fov: 52, y: 31.5, z: 36.5 };
+  /** Landscape phones in hand are often shallow; widen FOV slightly. */
+  private static readonly CAMERA_LANDSCAPE_SHALLOW = { fov: 54, y: 32.2, z: 37.5 };
+
   constructor(container: HTMLElement) {
     this.scene = new THREE.Scene();
     const colors = ENV_THEME_COLORS.dark;
@@ -36,7 +45,8 @@ export class SceneManager {
     container.appendChild(this.renderer.domElement);
 
     this.setupLighting();
-    window.addEventListener('resize', this.onWindowResize.bind(this));
+    window.addEventListener('resize', this.onResizeBound);
+    this.applyViewportCameraAndSize();
   }
 
   private setupLighting() {
@@ -65,10 +75,29 @@ export class SceneManager {
     this.scene.add(pLight);
   }
 
-  private onWindowResize() {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+  private applyViewportCameraAndSize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const aspect = h > 0 ? w / h : 1;
+    const shortSide = Math.min(w, h);
+    // Short min side: squat phone landscape/portrait WebViews; avoids letterboxing HUD over the board.
+    const compact = shortSide < 620;
+    const landscapeShallow = aspect >= 1.25 && h <= 460;
+    const cam = landscapeShallow
+      ? SceneManager.CAMERA_LANDSCAPE_SHALLOW
+      : compact
+        ? SceneManager.CAMERA_COMPACT
+        : SceneManager.CAMERA_DEFAULT;
+    this.camera.fov = cam.fov;
+    this.camera.position.y = cam.y;
+    this.camera.position.z = cam.z;
+    this.camera.aspect = w / Math.max(h, 1);
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setSize(w, h);
+  }
+
+  private onWindowResize() {
+    this.applyViewportCameraAndSize();
   }
 
   /** Switch environment theme (dark/light) for accessibility. */
@@ -85,7 +114,7 @@ export class SceneManager {
   }
 
   public dispose() {
-    window.removeEventListener('resize', this.onWindowResize.bind(this));
+    window.removeEventListener('resize', this.onResizeBound);
     this.renderer.dispose();
   }
 }

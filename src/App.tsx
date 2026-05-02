@@ -29,7 +29,13 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [showSelection, setShowSelection] = useState(true);
   const [zoneSearchModal, setZoneSearchModal] = useState<'limbo' | 'graveyard' | 'deck' | null>(null);
-  const [logMinimized, setLogMinimized] = useState(false);
+  const [logMinimized, setLogMinimized] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      window.matchMedia('(max-width: 1023px)').matches ||
+      window.matchMedia('(max-height: 560px)').matches
+    );
+  });
   const logScrollRef = useRef<HTMLDivElement>(null);
   const [environmentTheme, setEnvironmentTheme] = useState<EnvironmentTheme>(loadStoredTheme);
 
@@ -110,12 +116,13 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-full h-screen overflow-hidden font-cinzel">
+    <div className="relative w-full min-h-dvh overflow-hidden font-cinzel box-border pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]">
       {/* Environment theme toggle (accessibility) — bottom-left for less clutter */}
+      {/* Theme: desktop bottom-left; mobile top-center so it clears ENEMY/YOU corners. */}
       <button
         type="button"
         onClick={toggleEnvironmentTheme}
-        className="fixed bottom-4 left-4 z-[100] p-2 rounded-lg glass-panel border border-white/20 hover:border-[#00f2ff]/60 transition-all pointer-events-auto focus:outline-none focus:ring-2 focus:ring-[#00f2ff]/60"
+        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-[100] min-h-11 min-w-11 rounded-lg glass-panel touch-manipulation border border-white/20 p-2 transition-all hover:border-[#00f2ff]/60 focus:outline-none focus:ring-2 focus:ring-[#00f2ff]/60 active:opacity-90 hud-compact:bottom-auto hud-compact:left-1/2 hud-compact:right-auto hud-compact:top-[max(0.35rem,env(safe-area-inset-top))] hud-compact:-translate-x-1/2 desktop-hud:translate-x-0"
         title={environmentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         aria-label={environmentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
       >
@@ -127,6 +134,16 @@ export default function App() {
       {/* Three.js Container */}
       <div ref={containerRef} className="absolute inset-0 z-0" />
 
+      {/* Tap outside to dismiss log (mobile bottom sheet) — below HUD z-10 so transparent HUD areas receive the dimmer */}
+      {gameState && !showSelection && gameState.currentPhase !== Phase.GAME_OVER && !logMinimized && (
+        <button
+          type="button"
+          className="fixed inset-0 z-[8] cursor-default touch-manipulation bg-black/45 backdrop-blur-[1px] desktop-hud:hidden"
+          aria-label="Dismiss interaction log"
+          onClick={() => setLogMinimized(true)}
+        />
+      )}
+
       {/* Counter Overlay */}
       <AnimatePresence>
         {gameState?.currentPhase === Phase.COUNTER_ALLOCATION && (
@@ -134,7 +151,7 @@ export default function App() {
             initial={{ opacity: 0, x: -40, y: 0 }}
             animate={{ opacity: 1, x: 0, y: 0 }}
             exit={{ opacity: 0, x: -40, y: 0 }}
-            className="absolute top-1/2 left-6 -translate-y-1/2 z-50 glass-panel px-4 py-3 rounded-lg border border-[#00f2ff]/40 bg-black/70 shadow-[0_0_20px_rgba(0,242,255,0.35)] pointer-events-auto text-left min-w-[180px] space-y-2"
+            className="glass-panel pointer-events-auto absolute top-1/2 left-[max(1rem,env(safe-area-inset-left))] z-50 w-[min(16rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] -translate-y-1/2 space-y-2 rounded-lg border border-[#00f2ff]/40 bg-black/70 px-3 py-3 text-left shadow-[0_0_20px_rgba(0,242,255,0.35)] sm:min-w-[180px] sm:px-4 hud-compact:left-1/2 hud-compact:top-[max(5.75rem,calc(env(safe-area-inset-top)+5rem))] hud-compact:w-[min(18rem,calc(100vw-2rem))] hud-compact:-translate-x-1/2 hud-compact:translate-y-0 touch-manipulation"
           >
             <div className="text-[0.6rem] tracking-[0.2em] uppercase text-gray-400">
               Allocate Counters
@@ -150,8 +167,9 @@ export default function App() {
               </div>
             </div>
             <button
+              type="button"
               onClick={handleFinishCounters}
-              className="mt-1 px-4 py-1 bg-white/5 border border-white/15 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
+              className="mt-2 min-h-10 w-full touch-manipulation border border-white/15 bg-white/5 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-widest transition-all hover:border-[#00f2ff] hover:text-[#00f2ff] active:opacity-90 sm:mt-1 sm:w-auto sm:py-1"
             >
               Done
             </button>
@@ -166,7 +184,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="absolute top-24 left-1/2 -translate-x-1/2 z-50 glass-panel px-6 py-4 rounded-lg border border-[#00f2ff]/40 bg-black/80 pointer-events-none text-center"
+            className="absolute top-24 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-[#00f2ff]/40 bg-black/80 px-5 py-3 text-center pointer-events-none hud-compact:top-[max(6.75rem,calc(env(safe-area-inset-top)+5.75rem))] hud-compact:px-4 glass-panel sm:px-6 sm:py-4"
           >
             <div className="text-[0.65rem] tracking-[0.2em] uppercase text-gray-400 mb-1">Delta&apos;s sacrifice</div>
             <div className="text-sm text-[#00f2ff] font-semibold">+3 Power — click a creature</div>
@@ -182,12 +200,12 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center env-bg text-white"
+            className="absolute inset-0 z-50 flex max-h-dvh flex-col items-center justify-start overflow-y-auto overscroll-contain env-bg px-4 pb-10 pt-[max(3.5rem,env(safe-area-inset-top)+3rem)] text-white [touch-action:pan-y] sm:justify-center sm:py-12 sm:pt-12"
           >
-            <h1 className="text-5xl tracking-[10px] mb-4">ENDLESS SEVEN</h1>
-            <p className="text-gray-500 italic mb-12">"Choose your side. Seal the heartbeat of the world."</p>
+            <h1 className="mb-3 text-center text-3xl tracking-[0.25em] sm:mb-4 sm:text-5xl sm:tracking-[10px]">ENDLESS SEVEN</h1>
+            <p className="mb-8 max-w-md text-center text-sm italic text-gray-500 sm:mb-12 sm:text-base">&quot;Choose your side. Seal the heartbeat of the world.&quot;</p>
             
-            <div className="flex gap-12">
+            <div className="flex flex-col gap-4 px-4 sm:flex-row sm:gap-8 md:gap-12">
               <AlignmentCard
                 side={Alignment.LIGHT}
                 title="LIGHT"
@@ -211,86 +229,120 @@ export default function App() {
 
       {/* HUD (hidden during Game Over) */}
       {gameState && !showSelection && gameState.currentPhase !== Phase.GAME_OVER && (
-        <div className="absolute inset-0 pointer-events-none flex flex-col justify-between z-10">
-          {/* Top Bar */}
-          <div className="hud-gradient-top p-6 flex justify-between items-start pointer-events-auto">
-            <div className={`p-4 rounded-lg glass-panel min-w-[150px] ${gameState.playerAlignment === Alignment.LIGHT ? 'dark-glow' : 'light-glow'}`}>
-              <div className="text-[0.7rem] text-[#ff0044]">ENEMY</div>
-              <div className="text-3xl">{gameState.enemyScore} / 7</div>
-              <div className="flex justify-between text-[0.6rem] text-gray-400 mt-1">
-                <span>DECK: {gameState.enemyDeckCount}</span>
-                <span>GRAVE: {gameState.enemyGraveyardCount}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col items-center gap-2">
-              <div className="glass-panel px-6 py-2 rounded-b-xl border-t-0 flex gap-6 items-center flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="text-center">
-                    <div className="text-lg text-white">ROUND {gameState.currentRound}</div>
-                    <div className="text-[0.6rem] text-gray-500 uppercase tracking-widest">Awaiting Command</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setZoneSearchModal('limbo')}
-                      className="px-3 py-1.5 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
-                    >
-                      Search Limbo
-                    </button>
-                    <button
-                      onClick={() => setZoneSearchModal('graveyard')}
-                      className="px-3 py-1.5 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
-                    >
-                      Search Graveyard
-                    </button>
-                    <button
-                      onClick={() => setZoneSearchModal('deck')}
-                      className="px-3 py-1.5 bg-white/5 border border-white/20 hover:border-[#00f2ff]/60 hover:text-[#00f2ff] transition-all text-[0.6rem] tracking-widest uppercase font-semibold"
-                    >
-                      Search Deck
-                    </button>
-                  </div>
-                </div>
-                <div className="h-8 w-px bg-white/20" />
-                <div className="text-center min-w-[150px]">
-                  <div className="text-xl text-white uppercase tracking-widest">{gameState.currentPhase.replace('_', ' ')}</div>
-                  <div className="text-[0.65rem] text-[#00f2ff] font-bold uppercase tracking-widest">{gameState.phaseStep}</div>
+        <div
+          className={`absolute inset-0 z-10 flex flex-col justify-between pointer-events-none ${!logMinimized ? 'hud-compact:pb-[min(30vh,220px)]' : ''}`}
+        >
+          {/* Top Bar — grid on small screens: scores row + full-width command; avoids covering the board */}
+          <div className="hud-gradient-top pointer-events-auto px-2 pt-2 pb-2 landscape-short:py-1 landscape-short:pb-1 sm:px-3 desktop-hud:p-6">
+            <div className="grid w-full grid-cols-2 gap-x-2 gap-y-2 landscape-short:gap-x-1.5 landscape-short:gap-y-1 desktop-hud:grid-cols-[minmax(0,auto)_1fr_minmax(0,auto)] desktop-hud:gap-x-6 desktop-hud:items-start">
+              <div
+                className={`min-w-0 rounded-lg glass-panel p-2 sm:p-3 desktop-hud:col-start-1 desktop-hud:row-start-1 desktop-hud:min-w-[150px] desktop-hud:p-4 ${gameState.playerAlignment === Alignment.LIGHT ? 'dark-glow' : 'light-glow'}`}
+              >
+                <div className="text-[0.55rem] sm:text-[0.7rem] text-[#ff0044]">ENEMY</div>
+                <div className="text-xl sm:text-2xl desktop-hud:text-3xl tabular-nums leading-tight">{gameState.enemyScore} / 7</div>
+                <div className="mt-0.5 flex justify-between gap-1 text-[0.5rem] text-gray-400 sm:text-[0.6rem] desktop-hud:mt-1">
+                  <span className="truncate"><span className="lg:hidden">D:</span><span className="hidden desktop-hud:inline">DECK: </span>{gameState.enemyDeckCount}</span>
+                  <span className="truncate"><span className="lg:hidden">G:</span><span className="hidden desktop-hud:inline">GRAVE: </span>{gameState.enemyGraveyardCount}</span>
                 </div>
               </div>
-              {gameState.currentPhase === Phase.PREP && (
-                <div className="flex flex-wrap items-center justify-end gap-2 pointer-events-auto">
-                  <button
-                    type="button"
-                    onClick={handlePrepBack}
-                    disabled={!gameRef.current?.canUndoPrep()}
-                    className="px-4 py-2 bg-white/5 border border-white/20 hover:border-amber-400/80 hover:text-amber-200 transition-all text-xs tracking-widest uppercase font-bold disabled:opacity-40 disabled:pointer-events-none disabled:hover:border-white/20 disabled:hover:text-inherit"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEndPrep}
-                    className="px-6 py-2 bg-white/5 border border-white/20 hover:border-[#00f2ff] hover:text-[#00f2ff] transition-all text-xs tracking-widest uppercase font-bold"
-                  >
-                    End Prep Phase
-                  </button>
-                </div>
-              )}
-            </div>
 
-            <div className={`p-4 rounded-lg glass-panel min-w-[150px] text-right ${gameState.playerAlignment === Alignment.LIGHT ? 'light-glow' : 'dark-glow'}`}>
-              <div className="text-[0.7rem] text-[#00f2ff]">YOU</div>
-              <div className="text-3xl">{gameState.playerScore} / 7</div>
-              <div className="flex justify-between text-[0.6rem] text-gray-400 mt-1">
-                <span>GRAVE: {gameState.playerGraveyardCount}</span>
-                <span>DECK: {gameState.playerDeckCount}</span>
+              <div
+                className={`min-w-0 justify-self-end rounded-lg glass-panel p-2 text-right sm:p-3 desktop-hud:col-start-3 desktop-hud:row-start-1 desktop-hud:justify-self-auto desktop-hud:p-4 ${gameState.playerAlignment === Alignment.LIGHT ? 'light-glow' : 'dark-glow'}`}
+              >
+                <div className="text-[0.55rem] sm:text-[0.7rem] text-[#00f2ff]">YOU</div>
+                <div className="text-xl sm:text-2xl desktop-hud:text-3xl tabular-nums leading-tight">{gameState.playerScore} / 7</div>
+                <div className="mt-0.5 flex justify-between gap-1 text-[0.5rem] text-gray-400 sm:text-[0.6rem] desktop-hud:mt-1">
+                  <span className="truncate"><span className="lg:hidden">G:</span><span className="hidden desktop-hud:inline">GRAVE: </span>{gameState.playerGraveyardCount}</span>
+                  <span className="truncate"><span className="lg:hidden">D:</span><span className="hidden desktop-hud:inline">DECK: </span>{gameState.playerDeckCount}</span>
+                </div>
+              </div>
+
+              <div className="col-span-2 flex min-w-0 flex-col items-stretch gap-1.5 desktop-hud:col-span-1 desktop-hud:col-start-2 desktop-hud:row-start-1 desktop-hud:items-center desktop-hud:gap-2">
+                <div className="glass-panel flex flex-col gap-2 rounded-b-xl border-t-0 px-2 py-1.5 sm:px-4 sm:py-2 desktop-hud:flex-row desktop-hud:items-center desktop-hud:gap-6 desktop-hud:px-6">
+                  <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 sm:gap-3">
+                    <div className="text-center shrink-0">
+                      <div className="text-sm text-white sm:text-base desktop-hud:text-lg">ROUND {gameState.currentRound}</div>
+                      <div className="text-[0.5rem] uppercase tracking-widest text-gray-500 sm:text-[0.6rem]">Awaiting Command</div>
+                    </div>
+                    <div className="flex max-w-full flex-wrap justify-center gap-1 sm:gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setZoneSearchModal('limbo')}
+                        className="touch-manipulation border border-white/20 bg-white/5 px-1.5 py-1 text-[0.5rem] font-semibold uppercase tracking-widest transition-all hover:border-[#00f2ff]/60 hover:text-[#00f2ff] active:scale-[0.98] active:opacity-90 hud-compact:min-h-10 hud-compact:px-2.5 hud-compact:py-2 sm:px-2.5 sm:py-1.5 sm:text-[0.55rem] desktop-hud:min-h-0 desktop-hud:px-3 desktop-hud:text-[0.6rem]"
+                      >
+                        <span className="hidden desktop-hud:inline">Search </span>Limbo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setZoneSearchModal('graveyard')}
+                        className="touch-manipulation border border-white/20 bg-white/5 px-1.5 py-1 text-[0.5rem] font-semibold uppercase tracking-widest transition-all hover:border-[#00f2ff]/60 hover:text-[#00f2ff] active:scale-[0.98] active:opacity-90 hud-compact:min-h-10 hud-compact:px-2.5 hud-compact:py-2 sm:px-2.5 sm:py-1.5 sm:text-[0.55rem] desktop-hud:min-h-0 desktop-hud:px-3 desktop-hud:text-[0.6rem]"
+                      >
+                        <span className="hidden desktop-hud:inline">Search </span>
+                        <span className="lg:hidden">Grave</span>
+                        <span className="hidden desktop-hud:inline">Graveyard</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setZoneSearchModal('deck')}
+                        className="touch-manipulation border border-white/20 bg-white/5 px-1.5 py-1 text-[0.5rem] font-semibold uppercase tracking-widest transition-all hover:border-[#00f2ff]/60 hover:text-[#00f2ff] active:scale-[0.98] active:opacity-90 hud-compact:min-h-10 hud-compact:px-2.5 hud-compact:py-2 sm:px-2.5 sm:py-1.5 sm:text-[0.55rem] desktop-hud:min-h-0 desktop-hud:px-3 desktop-hud:text-[0.6rem]"
+                      >
+                        <span className="hidden desktop-hud:inline">Search </span>Deck
+                      </button>
+                    </div>
+                  </div>
+                  <div className="hidden h-8 w-px shrink-0 bg-white/20 desktop-hud:block" />
+                  <div className="min-w-0 text-center desktop-hud:min-w-[150px]">
+                    <div className="text-sm uppercase tracking-widest text-white sm:text-base desktop-hud:text-xl">
+                      {gameState.currentPhase.replace('_', ' ')}
+                    </div>
+                    <div className="text-[0.55rem] font-bold uppercase tracking-widest text-[#00f2ff] sm:text-[0.65rem]">{gameState.phaseStep}</div>
+                  </div>
+                </div>
+                {gameState.currentPhase === Phase.PREP && (
+                  <div className="hidden flex-wrap items-center justify-center gap-2 pointer-events-auto desktop-hud:flex">
+                    <button
+                      type="button"
+                      onClick={handlePrepBack}
+                      disabled={!gameRef.current?.canUndoPrep()}
+                      className="border border-white/20 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:border-amber-400/80 hover:text-amber-200 disabled:pointer-events-none disabled:opacity-40 disabled:hover:border-white/20 disabled:hover:text-inherit"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleEndPrep}
+                      className="border border-white/20 bg-white/5 px-6 py-2 text-xs font-bold uppercase tracking-widest transition-all hover:border-[#00f2ff] hover:text-[#00f2ff]"
+                    >
+                      End Prep Phase
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
           {/* Bottom Bar */}
-          <div className="hud-gradient-bottom p-8 flex flex-col items-center pointer-events-auto">
-            <div className="text-sm text-gray-300 italic text-center max-w-2xl mb-4">
+          <div className="hud-gradient-bottom pointer-events-auto flex flex-col items-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 landscape-short:pt-1 landscape-short:pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-4 sm:pb-4 desktop-hud:p-8">
+            {gameState.currentPhase === Phase.PREP && (
+              <div className="pointer-events-auto mb-2 flex w-full max-w-md flex-wrap justify-center gap-2 desktop-hud:hidden">
+                <button
+                  type="button"
+                  onClick={handlePrepBack}
+                  disabled={!gameRef.current?.canUndoPrep()}
+                  className="touch-manipulation min-h-11 min-w-[6.25rem] border border-white/20 bg-white/5 px-4 py-2.5 text-[0.65rem] font-bold uppercase tracking-widest transition-all hover:border-amber-400/80 hover:text-amber-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEndPrep}
+                  className="touch-manipulation min-h-11 border border-white/20 bg-white/5 px-5 py-2.5 text-[0.65rem] font-bold uppercase tracking-widest transition-all hover:border-[#00f2ff] hover:text-[#00f2ff] active:scale-[0.98]"
+                >
+                  End Prep
+                </button>
+              </div>
+            )}
+            <div className="mb-2 max-w-[min(42rem,100%)] px-1 text-center text-xs text-gray-300 italic sm:text-sm desktop-hud:mb-4">
               {gameState.instructionText}
             </div>
             {gameState.hoveredZone && (
@@ -302,38 +354,60 @@ export default function App() {
               </div>
             )}
             {gameState.currentPhase === Phase.PREP && (
-              <div className="text-[0.65rem] text-gray-500 uppercase tracking-wider text-center">
-                Click a card in your Limbo to use its ability (e.g. Martyr, Saint Michael).
+              <div className="text-center text-[0.6rem] uppercase tracking-wider text-gray-500 sm:text-[0.65rem]">
+                Tap a card in your Limbo to use its ability (e.g. Martyr, Saint Michael).
               </div>
             )}
           </div>
 
-          {/* Side Log — minimizable; shows only recent entries until game over */}
+          {/* Interaction log: side rail on desktop; bottom sheet on small screens so the board stays visible */}
           {logMinimized ? (
             <button
               type="button"
               onClick={() => setLogMinimized(false)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-10 h-24 bg-black/40 backdrop-blur-md border-l border-white/10 pointer-events-auto flex flex-col items-center justify-center gap-1 hover:bg-black/60 transition-colors"
+              className="pointer-events-auto absolute right-0 top-1/2 z-[25] flex h-24 w-11 min-h-11 min-w-11 -translate-y-1/2 touch-manipulation flex-col items-center justify-center gap-1 border-l border-white/10 bg-black/50 backdrop-blur-md transition-colors hover:bg-black/65 active:scale-[0.98] hud-compact:right-[max(0.5rem,env(safe-area-inset-right))] hud-compact:top-auto hud-compact:bottom-[calc(5.75rem+env(safe-area-inset-bottom))] hud-compact:h-12 hud-compact:min-h-12 hud-compact:w-14 hud-compact:min-w-14 hud-compact:translate-y-0 hud-compact:flex-row hud-compact:rounded-lg hud-compact:border hud-compact:border-white/15 desktop-hud:max-xl:h-20"
               title="Expand interaction log"
+              aria-expanded="false"
             >
-              <span className="text-[0.5rem] text-gray-500 uppercase tracking-widest [writing-mode:vertical] rotate-180">Log</span>
+              <span className="text-[0.5rem] uppercase tracking-widest text-gray-500 [writing-mode:vertical] rotate-180 hud-compact:[writing-mode:horizontal] hud-compact:rotate-0">
+                Log
+              </span>
               <span className="text-[0.55rem] text-[#00f2ff]/80">{gameState.logs.length}</span>
             </button>
           ) : (
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-72 h-[60vh] bg-black/40 backdrop-blur-md border-l border-white/10 p-4 pointer-events-auto flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between gap-2 mb-4 border-b border-white/10 pb-2 shrink-0">
+            <div className="pointer-events-auto absolute right-0 top-1/2 z-[25] flex h-[60vh] w-72 max-w-[min(18rem,92vw)] -translate-y-1/2 flex-col overflow-hidden border-l border-white/10 bg-black/50 p-0 backdrop-blur-md hud-compact:left-[max(0.5rem,env(safe-area-inset-left))] hud-compact:right-[max(0.5rem,env(safe-area-inset-right))] hud-compact:top-auto hud-compact:bottom-0 hud-compact:h-[min(36vh,272px)] hud-compact:max-h-[min(320px,40dvh)] hud-compact:w-auto hud-compact:max-w-none hud-compact:translate-y-0 hud-compact:rounded-t-2xl hud-compact:border hud-compact:border-white/15 hud-compact:border-b-0 hud-compact:pb-[env(safe-area-inset-bottom,0px)] hud-compact:shadow-[0_-8px_32px_rgba(0,0,0,0.45)] desktop-hud:border-l desktop-hud:p-3 desktop-hud:max-xl:w-64 desktop-hud:max-xl:text-[0.65rem] desktop-hud:rounded-none">
+              <div className="flex shrink-0 flex-col border-b border-white/10 desktop-hud:hidden">
+                <div className="mx-auto mb-2 mt-2 h-1 w-10 shrink-0 rounded-full bg-white/25" aria-hidden />
+                <div className="flex items-center justify-between gap-2 px-3 pb-2">
+                  <span className="text-[0.6rem] text-gray-400 uppercase tracking-widest">Interaction Log</span>
+                  <button
+                    type="button"
+                    onClick={() => setLogMinimized(true)}
+                    className="touch-manipulation min-h-11 min-w-11 rounded-md p-2 text-gray-400 transition-colors hover:bg-white/10 hover:text-gray-100 active:opacity-90"
+                    title="Collapse log"
+                    aria-label="Collapse interaction log"
+                    aria-expanded="true"
+                  >
+                    <svg className="mx-auto h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="hidden shrink-0 items-center justify-between gap-2 border-b border-white/10 pb-2 desktop-hud:flex">
                 <span className="text-[0.6rem] text-gray-500 uppercase tracking-widest">Interaction Log</span>
                 <button
                   type="button"
                   onClick={() => setLogMinimized(true)}
-                  className="text-gray-500 hover:text-gray-300 p-1 transition-colors"
+                  className="touch-manipulation min-h-9 min-w-9 rounded p-1 text-gray-500 transition-colors hover:bg-white/10 hover:text-gray-300"
                   title="Minimize log"
                   aria-label="Minimize log"
+                  aria-expanded="true"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
                 </button>
               </div>
-              <div ref={logScrollRef} className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin min-h-0">
+              <div ref={logScrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 pb-2 [touch-action:pan-y] scrollbar-thin sm:pr-2 desktop-hud:px-0">
                 {displayLogs.map((log, i) => {
                   const globalIndex = gameState?.currentPhase === Phase.GAME_OVER ? i : (gameState?.logs?.length ?? 0) - displayLogs.length + i;
                   return (
@@ -351,11 +425,14 @@ export default function App() {
                 <div id="log-bottom" />
               </div>
               {gameState.currentPhase !== Phase.GAME_OVER && gameState.logs.length > LOG_RECENT_COUNT && (
-                <div className="text-[0.55rem] text-gray-600 mt-1 shrink-0">Showing last {LOG_RECENT_COUNT} of {gameState.logs.length} · full log at game end</div>
+                <div className="mt-1 shrink-0 px-3 text-[0.55rem] text-gray-600 desktop-hud:px-0">
+                  Showing last {LOG_RECENT_COUNT} of {gameState.logs.length} · full log at game end
+                </div>
               )}
               <button
+                type="button"
                 onClick={handleForceSkip}
-                className="mt-4 px-4 py-2 bg-white/5 border border-white/10 hover:border-[#ff0044] hover:text-[#ff0044] transition-all text-[0.6rem] tracking-widest uppercase font-bold shrink-0"
+                className="mt-2 shrink-0 touch-manipulation border border-white/10 bg-white/5 px-4 py-3 text-[0.6rem] font-bold uppercase tracking-widest transition-all hover:border-[#ff0044] hover:text-[#ff0044] active:opacity-90 hud-compact:mx-3 hud-compact:mb-3 hud-compact:min-h-12 hud-compact:w-[calc(100%-1.5rem)] desktop-hud:mt-4 desktop-hud:py-2"
               >
                 Skip Interaction
               </button>
@@ -375,7 +452,7 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="absolute inset-0 z-[100] flex flex-col bg-black/92 backdrop-blur-md max-lg:overflow-y-auto lg:overflow-hidden p-3 sm:p-5"
+            className="absolute inset-0 z-[100] flex flex-col bg-black/92 backdrop-blur-md hud-compact:overflow-y-auto desktop-hud:overflow-hidden p-3 sm:p-5"
           >
             <header className="shrink-0 text-center max-w-4xl mx-auto w-full pb-3 border-b border-white/5">
               <h1 className="text-2xl sm:text-4xl md:text-5xl tracking-[0.15em] sm:tracking-[0.25em]">
@@ -400,9 +477,9 @@ export default function App() {
               )}
             </header>
 
-            <div className="flex-1 min-h-0 w-full max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(260px,34%)_1fr] gap-4 lg:gap-6 pt-4">
+            <div className="flex-1 min-h-0 w-full max-w-6xl mx-auto grid grid-cols-1 desktop-hud:grid-cols-[minmax(260px,34%)_1fr] gap-4 desktop-hud:gap-6 pt-4">
               {/* Left: achievements — full list visible, no internal scroll */}
-              <aside className="min-h-0 flex flex-col lg:pr-2 lg:overflow-hidden border-b lg:border-b-0 lg:border-r border-white/10 pb-4 lg:pb-0">
+              <aside className="min-h-0 flex flex-col desktop-hud:pr-2 desktop-hud:overflow-hidden border-b desktop-hud:border-b-0 desktop-hud:border-r border-white/10 pb-4 desktop-hud:pb-0">
                 {gameState.gameOverResult && (
                   <GameOverAchievements
                     result={gameState.gameOverResult}
@@ -419,7 +496,7 @@ export default function App() {
                   <div className="shrink-0 text-[0.6rem] text-[#00f2ff]/70 uppercase tracking-[0.25em] px-4 py-2.5 border-b border-white/10 bg-white/[0.03]">
                     Event log
                   </div>
-                  <div className="game-over-log-scroll flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 min-h-[12rem] lg:min-h-0">
+                  <div className="game-over-log-scroll flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 min-h-[12rem] desktop-hud:min-h-0">
                     {gameState.logs.length > 0 ? (
                       <div className="space-y-1.5">
                         {gameState.logs.map((log, i) => (
@@ -460,7 +537,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+            className="glass-panel absolute left-1/2 z-[85] flex max-w-[min(24rem,calc(100vw-1.25rem))] -translate-x-1/2 touch-manipulation flex-col items-center gap-3 border border-[#00f2ff]/40 bg-black/70 px-4 py-4 pointer-events-auto bottom-[max(7rem,calc(env(safe-area-inset-bottom)+5rem))] hud-compact:bottom-[max(5.75rem,calc(env(safe-area-inset-bottom)+4.75rem))] sm:px-6"
           >
             <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">The Almighty — Activate</div>
             <div className="text-xs text-gray-200 text-center max-w-xs">
@@ -489,7 +566,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+            className="glass-panel absolute left-1/2 z-[85] flex max-w-[min(24rem,calc(100vw-1.25rem))] -translate-x-1/2 touch-manipulation flex-col items-center gap-3 border border-[#00f2ff]/40 bg-black/70 px-4 py-4 pointer-events-auto bottom-[max(7rem,calc(env(safe-area-inset-bottom)+5rem))] hud-compact:bottom-[max(5.75rem,calc(env(safe-area-inset-bottom)+4.75rem))] sm:px-6"
           >
             <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">The Destroyer — Activate</div>
             <div className="text-xs text-gray-200 text-center max-w-xs">
@@ -518,7 +595,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+            className="glass-panel absolute left-1/2 z-[85] flex max-w-[min(24rem,calc(100vw-1.25rem))] -translate-x-1/2 touch-manipulation flex-col items-center gap-3 border border-[#00f2ff]/40 bg-black/70 px-4 py-4 pointer-events-auto bottom-[max(7rem,calc(env(safe-area-inset-bottom)+5rem))] hud-compact:bottom-[max(5.75rem,calc(env(safe-area-inset-bottom)+4.75rem))] sm:px-6"
           >
             <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">Death — Flip</div>
             <div className="text-xs text-gray-200 text-center max-w-xs">
@@ -547,7 +624,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3"
+            className="glass-panel absolute left-1/2 z-[85] flex max-w-[min(24rem,calc(100vw-1.25rem))] -translate-x-1/2 touch-manipulation flex-col items-center gap-3 border border-[#00f2ff]/40 bg-black/70 px-4 py-4 pointer-events-auto bottom-[max(7rem,calc(env(safe-area-inset-bottom)+5rem))] hud-compact:bottom-[max(5.75rem,calc(env(safe-area-inset-bottom)+4.75rem))] sm:px-6"
           >
             <div className="text-[0.7rem] text-gray-400 uppercase tracking-widest">Lust — Choose Seal Influence</div>
             <div className="text-xs text-gray-200 text-center max-w-xs">
@@ -594,7 +671,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[80] glass-panel px-6 py-4 border border-[#00f2ff]/40 bg-black/70 pointer-events-auto flex flex-col items-center gap-3 min-w-[280px]"
+            className="glass-panel absolute left-1/2 z-[85] flex min-w-0 w-[min(100%,24rem)] max-w-[calc(100vw-1.25rem)] sm:min-w-[280px] -translate-x-1/2 touch-manipulation flex-col items-center gap-3 border border-[#00f2ff]/40 bg-black/70 px-4 py-4 pointer-events-auto bottom-[max(7rem,calc(env(safe-area-inset-bottom)+5rem))] hud-compact:bottom-[max(5.75rem,calc(env(safe-area-inset-bottom)+4.75rem))] sm:px-6"
           >
             <div className="text-[0.7rem] text-[#00f2ff] uppercase tracking-widest font-semibold border-b border-white/20 pb-2 w-full text-center">
               {gameState.decisionContext === 'FALLEN_ONE' && 'Fallen One (Limbo) — Nullify?'}
@@ -648,8 +725,12 @@ export default function App() {
       </AnimatePresence>
 
       {/* Version Badge */}
-      <div className="absolute bottom-4 right-6 z-[120] text-[0.65rem] tracking-widest text-gray-500 pointer-events-none">
-        VERSION PUBLISHED: <span className="text-gray-300">{GAME_VERSION}</span>
+      <div className="pointer-events-none absolute bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-[120] max-w-[min(12rem,46vw)] text-right text-[0.5rem] tracking-widest text-gray-500 sm:max-w-none sm:text-[0.65rem]">
+        <span className="hidden min-[380px]:inline">VERSION PUBLISHED: </span>
+        <span className="min-[380px]:hidden" aria-hidden>
+          Ver.{' '}
+        </span>
+        <span className="text-gray-300">{GAME_VERSION}</span>
       </div>
     </div>
   );
@@ -737,7 +818,7 @@ function ZoneSearchModal({
                       key={`player-${originalIndex}-${card.name}`}
                       onClick={() => clickable && onSelectLimboCard('player', originalIndex)}
                       role={clickable ? 'button' : undefined}
-                      className={`flex items-center gap-3 px-3 py-2 rounded border text-left text-[0.75rem] ${
+                      className={`flex min-h-11 touch-manipulation items-center gap-3 rounded border px-3 py-3 text-left text-[0.75rem] active:bg-white/[0.03] ${
                         clickable
                           ? 'border-[#00f2ff]/50 cursor-pointer hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]'
                           : 'border-white/10 bg-white/5'
@@ -766,7 +847,7 @@ function ZoneSearchModal({
                       key={`enemy-${originalIndex}-${card.name}`}
                       onClick={() => clickable && onSelectLimboCard('enemy', originalIndex)}
                       role={clickable ? 'button' : undefined}
-                      className={`flex items-center gap-3 px-3 py-2 rounded border text-left text-[0.75rem] ${
+                      className={`flex min-h-11 touch-manipulation items-center gap-3 rounded border px-3 py-3 text-left text-[0.75rem] active:bg-white/[0.03] ${
                         clickable
                           ? 'border-[#00f2ff]/50 cursor-pointer hover:bg-[#00f2ff]/10 hover:border-[#00f2ff]'
                           : 'border-white/10 bg-white/5'
@@ -796,9 +877,10 @@ function ZoneSearchModal({
 function AlignmentCard({ title, description, icon, color, onClick }: any) {
   return (
     <motion.div
-      whileHover={{ scale: 1.05 }}
+      whileHover={{ scale: 1.04 }}
+      whileTap={{ scale: 0.96 }}
       onClick={onClick}
-      className="w-[250px] h-[350px] border-2 border-white/10 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all hover:bg-white/5"
+      className="flex w-full max-w-[min(280px,92vw)] cursor-pointer touch-manipulation flex-col items-center justify-center rounded-2xl border-2 border-white/10 p-6 text-center transition-colors hover:bg-white/5 sm:h-[350px] sm:w-[250px] sm:max-w-none active:opacity-95"
       style={{ borderColor: `${color}44` }}
     >
       <div className="text-5xl mb-4" style={{ color }}>{icon}</div>
@@ -814,13 +896,7 @@ function CardPreviewOverlay({ card }: { card: HoveredCardInfo }) {
   const faceSrc = card.faceArtPath ? cardArtUrl(card.faceArtPath) : undefined;
 
   return (
-    <div
-      className="absolute right-0 top-1/2 -translate-y-1/2 z-[90] pointer-events-none flex items-center justify-center p-2"
-      style={{
-        width: 'min(20rem, 92vw)',
-        height: 'min(32rem, 72vh)'
-      }}
-    >
+    <div className="pointer-events-none absolute right-0 top-1/2 z-[90] flex h-[min(32rem,72vh)] w-[min(20rem,92vw)] -translate-y-1/2 items-center justify-center p-2 hud-compact:left-1/2 hud-compact:right-auto hud-compact:top-[22%] hud-compact:h-[min(11rem,38vh)] hud-compact:w-[min(10rem,42vw)] hud-compact:-translate-x-1/2 hud-compact:-translate-y-1/2">
       <div className="w-full h-full rounded-xl overflow-hidden border-2 border-white/20 bg-black/90 shadow-2xl flex flex-col">
         {/* Card art or placeholder */}
         <div className="flex-1 min-h-0 relative flex items-center justify-center bg-black/60">

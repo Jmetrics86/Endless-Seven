@@ -25,5 +25,10 @@ Standard commands are in `package.json` scripts:
 ### Android app (separate product tree)
 
 - **Location:** [`android/`](android/) — Kotlin/Compose shell + `WebView` packaging for the Three.js board from web assets (see [`android/README.md`](android/README.md)).
-- **Build:** Run `npm run build:android:web` at repo root, then from `android/`, run `gradlew.bat assembleDebug` (Windows) or `./gradlew assembleDebug` (Unix).
+- **Streamlined builds (recommended):** From repo root, use `npm run android:debug` — runs `build:android:web` then `gradlew.bat assembleDebug`. On macOS/Linux, run `npm run build:android:web` then `cd android && ./gradlew assembleDebug`.
+- **Play Store bundles:** From root, `npm run android:release` runs `bundleRelease` (outputs an **AAB**, not an APK—see checklist).
+- **APK artifacts (Gradle defaults):**
+  - **Debug APK (installable for testing):** `android/app/build/outputs/apk/debug/app-debug.apk`
+  - **Release APK (unsigned until signing is configured):** `android/app/build/outputs/apk/release/app-release-unsigned.apk` — produced by `assembleRelease`; use signing + checklist for store-ready builds.
+- **Prerequisites:** JDK **17** (`JAVA_HOME`), Android SDK whose root is **`sdk.dir`** in `android/local.properties` (typically gitignored; create if Gradle reports “SDK location not found”). First-time CLI-only setups: accept licenses and install SDK components as in [`android/README.md`](android/README.md).
 - **Play Store:** See [`android/PLAY_STORE_CHECKLIST.md`](android/PLAY_STORE_CHECKLIST.md).

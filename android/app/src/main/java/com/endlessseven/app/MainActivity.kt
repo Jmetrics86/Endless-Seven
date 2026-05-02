@@ -1,10 +1,11 @@
 package com.endlessseven.app
 
+import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.view.ViewGroup
-import android.content.pm.ApplicationInfo
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -14,16 +15,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import com.endlessseven.app.ui.theme.EndlessSevenTheme
 
 class MainActivity : ComponentActivity() {
+    /** Paused/resumed with activity; cleared in [AndroidView] onRelease. */
+    private var webViewHolder: WebView? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val isDebuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -37,32 +43,63 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    EndlessSevenWebBoard()
+                    EndlessSevenWebBoard(
+                        onWebViewAttached = { w -> webViewHolder = w },
+                        onWebViewReleased = { webViewHolder = null },
+                    )
                 }
             }
         }
     }
+
+    override fun onPause() {
+        webViewHolder?.onPause()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webViewHolder?.onResume()
+    }
 }
 
+/**
+ * Loads the game from packaged assets via [WebViewAssetLoader].
+ *
+ * Android UX notes:
+ * - Activity [onPause]/[onResume] pair with [WebView.onPause]/[onResume] (audio, JS timers, WebGL).
+ * - [textZoom] 100 avoids OEM font scaling breaking the fixed HUD layout vs Chrome.
+ * - Hardware layer is a common smoothness hint for WebGL-heavy pages.
+ */
 @Composable
-private fun EndlessSevenWebBoard() {
+private fun EndlessSevenWebBoard(
+    onWebViewAttached: (WebView) -> Unit,
+    onWebViewReleased: () -> Unit,
+) {
+    val appContext = LocalContext.current.applicationContext
+    val assetLoader = remember(appContext) {
+        WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(appContext))
+            .build()
+    }
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
-            val assetLoader = WebViewAssetLoader.Builder()
-                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
-                .build()
             WebView(context).apply {
+                onWebViewAttached(this)
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
                 setBackgroundColor(Color.BLACK)
+                setLayerType(View.LAYER_TYPE_HARDWARE, null)
                 overScrollMode = WebView.OVER_SCROLL_NEVER
                 isVerticalScrollBarEnabled = false
                 isHorizontalScrollBarEnabled = false
                 isFocusable = true
                 isFocusableInTouchMode = true
+                scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
 
                 settings.apply {
                     javaScriptEnabled = true
@@ -76,6 +113,7 @@ private fun EndlessSevenWebBoard() {
                     builtInZoomControls = false
                     displayZoomControls = false
                     setSupportZoom(false)
+                    textZoom = TEXT_ZOOM_DEFAULT_PERCENT
                 }
 
                 webChromeClient = WebChromeClient()
@@ -99,7 +137,19 @@ private fun EndlessSevenWebBoard() {
                 loadUrl(GAME_URL)
             }
         },
+        onRelease = { webView ->
+            onWebViewReleased()
+            webView.apply {
+                stopLoading()
+                loadUrl(BLANK_PAGE)
+                clearHistory()
+                removeAllViews()
+                destroy()
+            }
+        },
     )
 }
 
 private const val GAME_URL = "https://appassets.androidplatform.net/assets/web/index.html"
+private const val BLANK_PAGE = "about:blank"
+private const val TEXT_ZOOM_DEFAULT_PERCENT = 100
