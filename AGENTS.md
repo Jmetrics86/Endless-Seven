@@ -22,6 +22,12 @@ Standard commands are in `package.json` scripts:
 - The Electron-related scripts (`electron:dev`, `electron:build`) require a display server and are not needed for web development or testing.
 - Lint (`tsc --noEmit`) exits with errors (exit code 2) due to pre-existing type issues in test mocks and a few source files. This is the repo's baseline state.
 
+### Git remotes (consolidated)
+
+- **`main`** includes the web game and the [`android/`](android/) shell; use it as the default branch for both pushes and PRs.
+- **`origin`** → [android_endless_seven](https://github.com/Jmetrics86/android_endless_seven) (primary remote for this Android-focused clone).
+- **`upstream`** → [Endless-Seven](https://github.com/Jmetrics86/Endless-Seven) (original repo). Sync with `git fetch upstream` when needed.
+
 ### Android app (separate product tree)
 
 - **Location:** [`android/`](android/) — Kotlin/Compose shell + `WebView` packaging for the Three.js board from web assets (see [`android/README.md`](android/README.md)).

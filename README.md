@@ -2,6 +2,8 @@
 
 A browser-based tactical card game built with **React**, **Three.js**, and **TypeScript**. You choose **Light** or **Darkness**, place creatures on seven **Seals**, and resolve each Seal in order during the **Resolution** phase. Card definitions and stats live in [`src/constants.ts`](src/constants.ts); rules engine flow is driven by [`src/game/PhaseManager.ts`](src/game/PhaseManager.ts) and [`src/game/AbilityManager.ts`](src/game/AbilityManager.ts).
 
+**Git:** This directory is the repository root (`.git` lives here). If your IDE opened a parent folder (for example `Endless Seven Android` on disk), run all `git` commands from **`Endless-Seven/`** or open that folder as the workspace.
+
 ---
 
 ## Objective
