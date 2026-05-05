@@ -66,6 +66,9 @@ tmp/
 # yarn.lock
 # pnpm-lock.yaml
 
+# Local Android SDK (CI/agent installs for headless Gradle; never commit)
+android-sdk/
+
 # Android (native app under android/)
 android/.gradle/
 android/**/build/

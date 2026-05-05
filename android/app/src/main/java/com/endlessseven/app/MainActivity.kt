@@ -1,15 +1,11 @@
 package com.endlessseven.app
 
 import android.content.pm.ApplicationInfo
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -88,33 +84,7 @@ private fun EndlessSevenWebBoard(
         factory = { context ->
             WebView(context).apply {
                 onWebViewAttached(this)
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                )
-                setBackgroundColor(Color.BLACK)
-                setLayerType(View.LAYER_TYPE_HARDWARE, null)
-                overScrollMode = WebView.OVER_SCROLL_NEVER
-                isVerticalScrollBarEnabled = false
-                isHorizontalScrollBarEnabled = false
-                isFocusable = true
-                isFocusableInTouchMode = true
-                scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    cacheMode = WebSettings.LOAD_DEFAULT
-                    allowFileAccess = true
-                    allowContentAccess = true
-                    mediaPlaybackRequiresUserGesture = false
-                    useWideViewPort = true
-                    loadWithOverviewMode = true
-                    builtInZoomControls = false
-                    displayZoomControls = false
-                    setSupportZoom(false)
-                    textZoom = TEXT_ZOOM_DEFAULT_PERCENT
-                }
+                WebBoardDisplayPolicy.applyInGameWebViewDisplaySettings(this)
 
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClientCompat() {
@@ -134,14 +104,14 @@ private fun EndlessSevenWebBoard(
                     }
                 }
 
-                loadUrl(GAME_URL)
+                loadUrl(WebBoardDisplayPolicy.GAME_URL)
             }
         },
         onRelease = { webView ->
             onWebViewReleased()
             webView.apply {
                 stopLoading()
-                loadUrl(BLANK_PAGE)
+                loadUrl(WebBoardDisplayPolicy.BLANK_PAGE)
                 clearHistory()
                 removeAllViews()
                 destroy()
@@ -150,6 +120,3 @@ private fun EndlessSevenWebBoard(
     )
 }
 
-private const val GAME_URL = "https://appassets.androidplatform.net/assets/web/index.html"
-private const val BLANK_PAGE = "about:blank"
-private const val TEXT_ZOOM_DEFAULT_PERCENT = 100
