@@ -38,7 +38,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.183.1",
-    "vite": "^6.2.0"
+    "vite": "^6.4.2"
   },
   "devDependencies": {
     "gh-pages": "^6.2.0",
@@ -47,22 +47,35 @@
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "electron": "^33.2.0",
+    "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0",
+    "vite": "^6.4.2",
     "wait-on": "^8.0.1",
     "vitest": "^3.2.4"
   },
   "build": {
     "appId": "com.endless-seven.app",
     "productName": "Endless Seven",
-    "files": ["dist/**", "electron/**"],
-    "directories": { "output": "release" },
-    "win": { "target": "nsis", "signAndEditExecutable": false },
-    "mac": { "target": "dmg", "category": "public.app-category.games" },
-    "linux": { "target": "AppImage" }
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.games"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }
