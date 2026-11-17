@@ -38,7 +38,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.183.1",
-    "vite": "^6.4.2"
+    "vite": "^6.4.5"
   },
   "devDependencies": {
     "gh-pages": "^6.2.0",
@@ -52,7 +52,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.4.2",
+    "vite": "^6.4.5",
     "wait-on": "^8.0.1",
     "vitest": "^3.2.4"
   },
